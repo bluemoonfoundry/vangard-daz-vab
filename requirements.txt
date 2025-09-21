@@ -1,0 +1,39 @@
+scrapy
+scrapy-playwright
+chromadb
+python-dotenv
+transformers
+accelerate
+fastapi
+uvicorn[standard]
+python-multipart
+outlines
+pydantic
+numpy
+bitsandbytes
+datasets
+einops
+sentence_transformers
+
+# Add torch seperately based on availability of CUDA?
+
+# For the CPU only build
+# torch
+
+# For a specific CUDA version
+# Run this command after installing the other requirements, replacing cu126 with 
+# the desired CUDA version, e.g., cu117, cu118, cu121, etc.
+#
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+#
+
+# For llama-cpp-python with GPU support (CUDA) if you want to rebuild
+#
+# CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python
+#
+# pip install llama-cpp-python==0.2.64 --prefer-binary --extra-index-url=https://abetlen.github.io/llama-cpp-python/whl/cu126
+#
+# Make sure we install playwright
+#
+# playwright install
+

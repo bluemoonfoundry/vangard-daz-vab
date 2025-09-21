@@ -1,0 +1,78 @@
+# --- Python Virtual Environments ---
+# A virtual environment is specific to your machine and can be rebuilt from requirements.txt.
+# Never commit your virtual environment.
+/venv/
+/.venv/
+/env/
+/env.bak/
+/activate
+.Python/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Python Bytecode and Cache ---
+# These are generated automatically by Python and can be recreated.
+# Committing them can cause merge conflicts.
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- IDEs and Editors ---
+# Each developer has their own editor settings; these don't belong in the repo.
+/.vscode/
+/.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- Secrets and Environment Variables ---
+# CRITICAL: Never commit secrets, API keys, or credentials.
+# Use a .env.example file to show what variables are needed.
+.env
+.env.*
+!.env.example
+
+# --- Testing and Coverage ---
+# These files are generated when you run tests or check code coverage.
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+/htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+
+# --- Databases ---
+# Local database files should not be committed.
+*.db
+*.sqlite3
+
+# --- Log Files ---
+# Log files are runtime artifacts and can become very large.
+*.log
+logs/
+
+# --- Jupyter Notebook ---
+# The checkpoints are auto-saves and backups, not the notebook itself.
+.ipynb_checkpoints
+
+# --- OS-specific files ---
+# Annoying system files that should be ignored globally.
+.DS_Store
+Thumbs.db

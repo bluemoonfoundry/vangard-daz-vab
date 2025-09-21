@@ -1,0 +1,79 @@
+import os, uuid
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional, List
+
+from query_utils import search, get_db_stats
+from api_tasks import run_update_flow
+from demo_data import get_demo_stats as get_demo_stats_mock, get_demo_search_results as search_mock
+from open_daz_product import main as open_daz_product
+
+APP_MODE = os.getenv("APP_MODE", "production")
+app = FastAPI(title=f"Visual Asset Browser API ({APP_MODE.upper()} MODE)", version="1.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+update_tasks = {}
+
+class QueryRequest(BaseModel):
+    prompt: str
+    limit: int = 10
+    offset: int = 0
+    tags: Optional[List[str]] = None
+    artists: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    compatible_figures: Optional[List[str]] = None
+    score_threshold: float = 1.0
+    sort_by: str = 'relevance'
+    sort_order: str = Field("descending", pattern="^(ascending|descending)$")
+
+@app.post("/api/v1/update", status_code=202)
+def start_update(background_tasks: BackgroundTasks):
+    if APP_MODE == 'demo': raise HTTPException(status_code=403, detail="Update functionality is disabled in demo mode.")
+    task_id = str(uuid.uuid4())
+    update_tasks[task_id] = {"status": "pending", "stage": "start", "progress": "Task has been queued."}
+    background_tasks.add_task(run_update_flow, update_tasks[task_id])
+    return {"message": "Update process started.", "task_id": task_id}
+
+@app.get("/api/v1/update/status/{task_id}")
+def get_update_status(task_id: str):
+    task = update_tasks.get(task_id)
+    if not task: raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@app.post("/api/v1/query")
+def run_query(request: QueryRequest):
+    print (f"Received query request: {request}")
+    print (f"model dump: {request.model_dump()}")
+    return search_mock(**request.model_dump()) if APP_MODE == "demo" else search(**request.model_dump())
+
+@app.get("/api/v1/browseproduct/{product_id}")
+def browse_product(product_id: str):
+    if APP_MODE == "demo":
+        return
+    open_daz_product(args=type('obj', (object,), {'product': product_id}))
+
+@app.get("/api/v1/info")
+def get_info():
+    """
+    Runs the stats command and returns the result as a JSON document,
+    including histograms for filterable fields.
+    """
+    # --- DEMO MODE CHECK ---
+    if APP_MODE == "demo":
+        print("--- DEMO MODE: Returning mock database stats. ---")
+        # We need to update the demo_data file to return this new structure
+        return get_demo_stats_mock() 
+
+    # --- PRODUCTION MODE ---
+    stats = get_db_stats()
+    if stats is None:
+        raise HTTPException(status_code=404, detail="Database collection not found or empty.")
+    
+    # Convert all Counter objects in the histograms to regular dictionaries
+    if 'histograms' in stats and stats['histograms']:
+        for key, counter in stats['histograms'].items():
+            stats['histograms'][key] = dict(counter)
+            
+    return stats
+    

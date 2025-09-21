@@ -1,0 +1,10 @@
+
+
+function OpenDazProductInContentLibrarySA() {
+
+    sProductName = App.scriptArgs[0];
+    MainWindow.getPaneMgr().findPane( "DzContentLibraryPane" ).browseToProduct( sProductName)
+    
+}
+
+OpenDazProductInContentLibrarySA();
