@@ -1,10 +1,11 @@
 # src/rebuild_chroma.py
 
-import sqlite3
 import json
 import os
-from dotenv import load_dotenv
+import sqlite3
+
 import chromadb
+from dotenv import load_dotenv
 
 # Import the new embedding utility
 from embedding_utils import generate_embeddings
@@ -21,19 +22,21 @@ def main():
     load_dotenv()
     CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
     COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-    SQLITE_DB_PATH =  os.getenv("SQLITE_DB_PATH", "products.db")
+    SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
 
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    
+
     print(f"Resetting and preparing ChromaDB collection: '{COLLECTION_NAME}'")
     # Delete the old collection to ensure a clean rebuild
     try:
         client.delete_collection(name=COLLECTION_NAME)
     except Exception as e:
-            print (f'WARNING: Collection {COLLECTION_NAME} not found, creating new one: {str(e)}')        
+        print(
+            f"WARNING: Collection {COLLECTION_NAME} not found, creating new one: {str(e)}"
+        )
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
-        metadata={"hnsw:space": "cosine"}  # Example for 768-dim embeddings
+        metadata={"hnsw:space": "cosine"},  # Example for 768-dim embeddings
     )
 
     # --- 2. Read All Products from SQLite ---
@@ -51,8 +54,8 @@ def main():
         return
 
     # --- 3. Prepare Data for Batch Processing ---
-    valid_products = [dict(row) for row in all_products if row['embedding_text']]
-    texts_to_embed = [p['embedding_text'] for p in valid_products]
+    valid_products = [dict(row) for row in all_products if row["embedding_text"]]
+    texts_to_embed = [p["embedding_text"] for p in valid_products]
 
     if not valid_products:
         print("No products with embedding_text found. Aborting.")
@@ -65,9 +68,9 @@ def main():
     print("Embeddings generated successfully.")
 
     # --- 5. Prepare Metadata and IDs ---
-    ids = [str(p['sku']) for p in valid_products]
-    documents = [p['embedding_text'] for p in valid_products]
-    
+    ids = [str(p["sku"]) for p in valid_products]
+    documents = [p["embedding_text"] for p in valid_products]
+
     metadatas = []
     for item in valid_products:
         clean_meta = {}
@@ -82,15 +85,15 @@ def main():
     # For very large datasets (>10k), you might want to loop in smaller batches.
     try:
         collection.upsert(
-            embeddings=embedding_list,
-            documents=documents,
-            metadatas=metadatas,
-            ids=ids
+            embeddings=embedding_list, documents=documents, metadatas=metadatas, ids=ids
         )
         print(f"\n--- Success! ---")
-        print(f"Upserted {len(ids)} documents into ChromaDB collection '{COLLECTION_NAME}'.")
+        print(
+            f"Upserted {len(ids)} documents into ChromaDB collection '{COLLECTION_NAME}'."
+        )
     except Exception as e:
         print(f"An error occurred while publishing to ChromaDB: {e}")
+
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,55 @@
-import requests
+import os
+import pathlib
+import subprocess
 import sys
+
+import requests
+
+
+def run_daz_script(script_name: str, script_args:list) -> bool:
+    """
+    Executes a DAZ Studio script using the DAZ command-line interface.
+
+    Args:
+        script_path (str): The file path to the DAZ script to be executed.
+
+    Returns:
+        bool: True if the script executed successfully, False otherwise.
+    """
+    try:
+        # Find the DAZ Studio executable
+        daz_root = os.getenv("DAZ_STUDIO_EXE_PATH")
+        if not daz_root or not os.path.exists(daz_root):
+            print("Error: DAZ_STUDIO_EXE_PATH is not set correctly in the environment")
+            return False
+        
+        # Find the script and make sure it exists
+        script_directory = pathlib.Path(__file__).parent.resolve()
+        script_file = f"{script_directory}/{script_name}"
+        if not os.path.exists(script_file):
+            print(f"Error: DAZ script '{script_file}' not found.")
+            return False    
+
+        # Construct the script args
+        script_args_parts = []
+        for (i, arg) in enumerate(script_args):
+            script_args_parts.append (f"-scriptArg '{arg}'")
+
+        script_args_complete = " ".join(script_args_parts)
+
+        print(f"Executing DAZ Studio script: {script_file}")
+
+        command_expanded = f"\"{daz_root}\" {script_args_complete} {script_file}"
+
+        process = subprocess.Popen(command_expanded, shell=False)
+
+        process.wait()
+
+        return True
+    
+    except Exception as e:
+        print(f"An unexpected error occurred while executing the DAZ script: {e}", file=sys.stderr)
+        return False
 
 def fetch_json_from_url(url: str, timeout: int = 10) -> dict | None:
     """
@@ -36,14 +86,17 @@ def fetch_json_from_url(url: str, timeout: int = 10) -> dict | None:
 
     except requests.exceptions.JSONDecodeError:
         # Handle cases where the response is not valid JSON (e.g., it's HTML).
-        print(f"Error: Failed to decode JSON. The content from the URL is not valid JSON.", file=sys.stderr)
+        print(
+            f"Error: Failed to decode JSON. The content from the URL is not valid JSON.",
+            file=sys.stderr,
+        )
         return None
 
     except requests.exceptions.RequestException as req_err:
         # Handle broader network issues (e.g., DNS failure, connection refused, timeout).
         print(f"Error: A network error occurred: {req_err}", file=sys.stderr)
         return None
-        
+
     except Exception as e:
         # A final catch-all for any other unexpected errors.
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
