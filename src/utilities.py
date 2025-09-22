@@ -30,18 +30,38 @@ def run_daz_script(script_name: str, script_args:list) -> bool:
             print(f"Error: DAZ script '{script_file}' not found.")
             return False    
 
-        # Construct the script args
-        script_args_parts = []
-        for (i, arg) in enumerate(script_args):
-            script_args_parts.append (f"-scriptArg '{arg}'")
+        command_list = [
+            daz_root
+        ]
 
-        script_args_complete = " ".join(script_args_parts)
+        for arg in script_args:
+            command_list.append("-scriptArg")
+            command_list.append(arg)
 
-        print(f"Executing DAZ Studio script: {script_file}")
+        command_list.append(script_file)
 
-        command_expanded = f"\"{daz_root}\" {script_args_complete} {script_file}"
+        # # Construct the script args
+        # script_args_parts = []
+        # for (i, arg) in enumerate(script_args):
+        #     script_args_parts.append (f"-scriptArg '{arg}'")
 
-        process = subprocess.Popen(command_expanded, shell=False)
+        # script_args_complete = " ".join(script_args_parts)
+
+        # print(f"Executing DAZ Studio script: {script_file} {script_args_complete}")
+
+
+
+        # command_expanded = f"\"{daz_root}\" {script_args_complete} {script_file}"
+
+        #process = subprocess.Popen(command_expanded, shell=False)
+        process = subprocess.Popen(
+                command_list,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True, # Use text=True for string output, or omit for bytes
+                shell=False 
+            )
+                
 
         process.wait()
 

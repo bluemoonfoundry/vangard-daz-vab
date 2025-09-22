@@ -3,6 +3,8 @@
 function OpenDazProductInContentLibrarySA() {
 
     sProductName = App.scriptArgs[0];
+
+    print ("Opening product in Content Library: [" + sProductName + "]");
     MainWindow.getPaneMgr().findPane( "DzContentLibraryPane" ).browseToProduct( sProductName)
     
 }
