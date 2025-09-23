@@ -14,6 +14,7 @@ bitsandbytes
 datasets
 einops
 sentence_transformers
+rich
 
 # Add torch seperately based on availability of CUDA?
 

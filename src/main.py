@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
+from output_formatters import print_pretty, print_json, print_table
 
 import uvicorn
 from dotenv import load_dotenv
@@ -209,43 +210,50 @@ def query_command(args):
     if not response or not response.get("results"):
         print("\n--- No results found for your query. ---")
         return
+    
+    if args.format == 'json':
+        print_json(response)
+    elif args.format == 'table':
+        print_table(response)
+    else: # Default to 'pretty'
+        print_pretty(response)
 
-    # Print a summary header
-    total_hits = response.get("total_hits", 0)
-    returned_count = len(response["results"])
-    offset = response.get("offset", 0)
+    # # Print a summary header
+    # total_hits = response.get("total_hits", 0)
+    # returned_count = len(response["results"])
+    # offset = response.get("offset", 0)
 
-    print("\n" + "=" * 60)
-    print(
-        f"Showing results {offset + 1} - {offset + returned_count} of {total_hits} total matches."
-    )
-    print("=" * 60)
+    # print("\n" + "=" * 60)
+    # print(
+    #     f"Showing results {offset + 1} - {offset + returned_count} of {total_hits} total matches."
+    # )
+    # print("=" * 60)
 
-    # Loop through and print each result
-    for i, res in enumerate(response["results"]):
-        metadata = res.get("metadata", {})
-        distance = res.get("distance", -1.0)
+    # # Loop through and print each result
+    # for i, res in enumerate(response["results"]):
+    #     metadata = res.get("metadata", {})
+    #     distance = res.get("distance", -1.0)
 
-        print(f"\n--- Result #{offset + i + 1} ---")
-        print(f"  Name:     {metadata.get('name', 'N/A')}")
-        print(f"  Artist:   {metadata.get('artist', 'N/A')}")
-        print(f"  Category: {metadata.get('category', 'N/A')}")
-        print(f"  SKU:      {res.get('id', 'N/A')}")
-        print(f"  URL:      {metadata.get('url', 'N/A')}")
-        print(f"  Image:    {metadata.get('image_url', 'N/A')}")
-        print(f"  Score (Distance): {distance:.4f} (lower is better)")
+    #     print(f"\n--- Result #{offset + i + 1} ---")
+    #     print(f"  Name:     {metadata.get('name', 'N/A')}")
+    #     print(f"  Artist:   {metadata.get('artist', 'N/A')}")
+    #     print(f"  Category: {metadata.get('category', 'N/A')}")
+    #     print(f"  SKU:      {res.get('id', 'N/A')}")
+    #     print(f"  URL:      {metadata.get('url', 'N/A')}")
+    #     print(f"  Image:    {metadata.get('image_url', 'N/A')}")
+    #     print(f"  Score (Distance): {distance:.4f} (lower is better)")
 
-        # Optionally print tags if they exist
-        if tags := metadata.get("tags"):
-            try:
-                # Tags are stored as a JSON string, so we parse and display them nicely
-                tag_list = json.loads(tags)
-                print(f"  Tags:     {', '.join(tag_list)}")
-            except (json.JSONDecodeError, TypeError):
-                # Fallback for non-JSON tag strings
-                print(f"  Tags:     {tags}")
+    #     # Optionally print tags if they exist
+    #     if tags := metadata.get("tags"):
+    #         try:
+    #             # Tags are stored as a JSON string, so we parse and display them nicely
+    #             tag_list = json.loads(tags)
+    #             print(f"  Tags:     {', '.join(tag_list)}")
+    #         except (json.JSONDecodeError, TypeError):
+    #             # Fallback for non-JSON tag strings
+    #             print(f"  Tags:     {tags}")
 
-    print("\n" + "=" * 60)
+    # print("\n" + "=" * 60)
 
 
 def stats_command(args):
@@ -363,12 +371,19 @@ def main():
         "--sort-order", choices=["ascending", "descending"], default="descending"
     )
     parsers["query"].add_argument("--categories", type=str, default=None)
+    parsers["query"].add_argument(
+        "--format",
+        choices=['pretty', 'json', 'table'],
+        default='pretty',
+        help="The output format for the results."
+    )
 
     parsers["server"].add_argument("--host", default="127.0.0.1")
     parsers["server"].add_argument("--port", type=int, default=8000)
     parsers["server"].add_argument(
         "--demo", action="store_true", help="Run server in demo mode."
     )
+    
 
     parsers["openproduct"].add_argument(
         "--product", help="The name of the product to open in DAZ Studio."
