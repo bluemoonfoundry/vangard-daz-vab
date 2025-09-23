@@ -1,6 +1,5 @@
 # src/rebuild_chroma.py
 
-import json
 import os
 import sqlite3
 

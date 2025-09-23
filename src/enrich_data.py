@@ -10,7 +10,6 @@ import outlines
 # --- LLM & AI Imports ---
 import torch
 from dotenv import load_dotenv
-from outlines import from_transformers
 # Pydantic is used to define our desired JSON structure
 from pydantic import BaseModel, Field
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
@@ -107,7 +106,6 @@ class LocalTransformerEnricher:
     def close(self):
         # Transformers models loaded this way don't need an explicit close()
         print("LocalTransformerEnricher closing.")
-        pass
 
 
 # --- 3. Main Script Logic ---

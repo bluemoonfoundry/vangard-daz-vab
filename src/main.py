@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import re
-import sys
 from datetime import datetime, timedelta, timezone
 from output_formatters import print_pretty, print_json, print_table
 

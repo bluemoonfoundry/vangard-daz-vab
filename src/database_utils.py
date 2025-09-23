@@ -1,6 +1,5 @@
 # src/database_utils.py
 
-import json
 import os
 import sqlite3
 
