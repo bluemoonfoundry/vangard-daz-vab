@@ -39,7 +39,6 @@ class QueryRequest(BaseModel):
     sort_by: str = "relevance"
     sort_order: str = Field("descending", pattern="^(ascending|descending)$")
 
-
 @app.post("/api/v1/update", status_code=202)
 def start_update(background_tasks: BackgroundTasks):
     if APP_MODE == "demo":
@@ -55,14 +54,12 @@ def start_update(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_update_flow, update_tasks[task_id])
     return {"message": "Update process started.", "task_id": task_id}
 
-
 @app.get("/api/v1/update/status/{task_id}")
 def get_update_status(task_id: str):
     task = update_tasks.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
-
 
 @app.post("/api/v1/query")
 def run_query(request: QueryRequest):

@@ -10,13 +10,12 @@ import uvicorn
 from dotenv import load_dotenv
 
 from database_utils import load_sqlite_to_chroma
-from enrich_data import main as run_enrichment
-from fetch_daz_data import main as fetch_daz_data
+#from enrich_data import main as run_enrichment
+from fetch_daz_data import pre_fetch_faz_data, fetch_daz_data
 from fetch_daz_data import product_file
 from query_utils import get_db_stats, search
 from rebuild_chroma import main as run_rebuild
 from scraper_process import run_scraper
-from utilities import fetch_json_from_url
 
 load_dotenv()
 
@@ -60,53 +59,16 @@ def set_checkpoint():
 
 def fetch_command(args):
     print("Starting fetch command...")
-    rv = fetch_daz_data(args)
+    rv = pre_fetch_faz_data(args)
     if rv and args.prefetch_only == False:
-
-        # https://www.daz3d.com/cdn-cgi/image/width=380,height=494,fit=cover/https://gcdn.daz3d.com/p/90233/i/dforcefantasyholooutfitforgenesis9and8females00thumbdaz3d.jpg
-        # If we got valid data, read it and get the correct product url for each product
-
-        print(f"+++++++++++++++++ TEST {product_file}")
-        product_data = json.load(open(product_file, "r"))
-        print(f"Fetched {len(product_data)} products from DAZ Studio.")
-
-        x = 0
-        for product in product_data:
-            if "url" not in product or not product["url"]:
-                if product["store_id"] == 1:  # DAZ Store
-                    sku = product.get("sku")
-                    slab_url = f"http://www.daz3d.com/dazApi/slab/{sku}"
-                    content = fetch_json_from_url(slab_url)
-                    print(f"+++++ Process Item {x} of {len(product_data)}")
-                    if content is not None:
-                        image_root_url = content["imageUrl"]
-                        image_url = image_root_url[
-                            image_root_url.rfind("https://gcdn") :
-                        ]
-
-                        product_url = f"https://www.daz3d.com/{content['url']}"
-                        product["url"] = product_url
-                        product["image_url"] = image_url
-                        product["mature"] = content.get("mature", False)
-                        product["categoriesData"] = content.get("categoriesData", [])
-                        product["figureData"] = content.get("figureData", [])
-                        # Extract categoriesData and figureData if available
-                        print(
-                            f"Info: Computed DAZ Store URL for '{product['title']}' as '{product['url']}' with image_url '{image_url}'."
-                        )
-                else:
-                    print(
-                        f"Warning: No URL computable for '{product['title']}' (Store ID: {product['store_id']})."
-                    )
-            x += 1
-        with open(product_file, "w") as f:
-            json.dump(product_data, f, indent=2)
+        rv = fetch_daz_data(args)
     print("Fetch command complete.")
+    return rv
 
 
 def scrape_command(args):
     print("Starting scrape command...")
-    dbfile = args.product_file
+    dbfile = product_file
 
     try:
         with open(dbfile, "r") as f:
@@ -164,8 +126,9 @@ def scrape_command(args):
 
 
 def enrich_command(args):
-    print("Starting LLM data enrichment process...")
-    run_enrichment(args)
+    #print("Starting LLM data enrichment process...")
+    #run_enrichment(args)
+    print
 
 
 def rebuild_command(args):
@@ -217,44 +180,6 @@ def query_command(args):
         print_table(response)
     else: # Default to 'pretty'
         print_pretty(response)
-
-    # # Print a summary header
-    # total_hits = response.get("total_hits", 0)
-    # returned_count = len(response["results"])
-    # offset = response.get("offset", 0)
-
-    # print("\n" + "=" * 60)
-    # print(
-    #     f"Showing results {offset + 1} - {offset + returned_count} of {total_hits} total matches."
-    # )
-    # print("=" * 60)
-
-    # # Loop through and print each result
-    # for i, res in enumerate(response["results"]):
-    #     metadata = res.get("metadata", {})
-    #     distance = res.get("distance", -1.0)
-
-    #     print(f"\n--- Result #{offset + i + 1} ---")
-    #     print(f"  Name:     {metadata.get('name', 'N/A')}")
-    #     print(f"  Artist:   {metadata.get('artist', 'N/A')}")
-    #     print(f"  Category: {metadata.get('category', 'N/A')}")
-    #     print(f"  SKU:      {res.get('id', 'N/A')}")
-    #     print(f"  URL:      {metadata.get('url', 'N/A')}")
-    #     print(f"  Image:    {metadata.get('image_url', 'N/A')}")
-    #     print(f"  Score (Distance): {distance:.4f} (lower is better)")
-
-    #     # Optionally print tags if they exist
-    #     if tags := metadata.get("tags"):
-    #         try:
-    #             # Tags are stored as a JSON string, so we parse and display them nicely
-    #             tag_list = json.loads(tags)
-    #             print(f"  Tags:     {', '.join(tag_list)}")
-    #         except (json.JSONDecodeError, TypeError):
-    #             # Fallback for non-JSON tag strings
-    #             print(f"  Tags:     {tags}")
-
-    # print("\n" + "=" * 60)
-
 
 def stats_command(args):
     print("Gathering statistics from the database...")
@@ -377,6 +302,8 @@ def main():
         default='pretty',
         help="The output format for the results."
     )
+    parsers["query"].add_argument("--artists", nargs='*', help="List of artists to filter by.")
+    parsers["query"].add_argument("--compatible_figures", nargs='*', help="List of figures to filter by.")
 
     parsers["server"].add_argument("--host", default="127.0.0.1")
     parsers["server"].add_argument("--port", type=int, default=8000)

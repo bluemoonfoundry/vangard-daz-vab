@@ -1,3 +1,4 @@
+dotenv
 scrapy
 scrapy-playwright
 chromadb
@@ -9,7 +10,7 @@ uvicorn[standard]
 python-multipart
 outlines
 pydantic
-numpy
+numpy==2.3.0
 bitsandbytes
 datasets
 einops
