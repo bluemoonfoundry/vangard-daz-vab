@@ -121,13 +121,47 @@ Now for the fun part. Use the `query` command to search your library.
     ```cmd
     python vab.py query "gritty cyberpunk street clothes"
     ```
+
+    Produces this output:
+    ```
+    Starting query command...
+    --- Loading embedding model: mixedbread-ai/mxbai-embed-large-v1 ---
+    --- Embedding model loaded. ---
+    +++ Using mixedbread-ai/mxbai-embed-large-v1 for embedding +++
+    ┏━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┓
+    ┃ #    ┃ Name                                     ┃ Artist                     ┃ Category        ┃    Score ┃ SKU        ┃
+    ┡━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━┩
+    │ 1    │ Cyberpunk Street Props                   │ ["Polish"]                 │ Environments    │   0.3038 │ 81460      │
+    │ 2    │ Cyberpunk Back Alley                     │ ["Polish"]                 │ Props           │   0.3095 │ 81418      │
+    │ 3    │ dForce Night Runner Outfit for Genesis … │ ["Daz Originals", "GolaM"] │ People          │   0.3460 │ 54841      │
+    │ 4    │ dForce Urban Fall Style Outfit for Gene… │ ["PandyGirl",              │ N/A             │   0.3466 │ 92088      │
+    │      │                                          │ "WildDesigns"]             │                 │          │            │
+    │ 5    │ Cyberpunk Dark City                      │ ["Dreamlight", "Reedux     │ Environments    │   0.3476 │ 89352      │
+    │      │                                          │ Studio"]                   │                 │          │            │
+    └──────┴──────────────────────────────────────────┴────────────────────────────┴─────────────────┴──────────┴────────────┘
+    Showing 5 of 45 total matches.
+    ```    
 *   **Search with Filters:**
     ```cmd
     python vab.py query "elegant gown" --categories Clothing --compatible_figures "Genesis 9"
     ```
-*   **See Results as a Table:**
-    ```cmd
-    python vab.py query "fantasy armor" --format table
+    Produces this output:
+    ```
+    Starting query command...
+    --- Loading embedding model: mixedbread-ai/mxbai-embed-large-v1 ---
+    --- Embedding model loaded. ---
+    +++ Using mixedbread-ai/mxbai-embed-large-v1 for embedding +++
+    ┏━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┓
+    ┃ #    ┃ Name                                     ┃ Artist                     ┃ Category        ┃    Score ┃ SKU        ┃
+    ┡━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━┩
+    │ 1    │ dForce Aria Outfit for Genesis 9         │ ["Daz Originals", "Nelmi"] │ Clothes         │   0.2739 │ 90659      │
+    │ 2    │ dForce Aquarius Gown for Genesis 3 and … │ ["Sshodan"]                │ Female          │   0.2836 │ 69235      │
+    │ 3    │ dForce Gown of Fantasy 2 for Genesis 8 … │ ["outoftouch"]             │ Clothes         │   0.3241 │ 69465      │
+    │ 4    │ dForce Rochelle Gown for Genesis 8 Fema… │ ["Daz Originals",          │ People          │   0.3285 │ 56213      │
+    │      │                                          │ "PandyGirl"]               │                 │          │            │
+    │ 5    │ dForce Aurea Regina Outfit for Genesis … │ ["Daz Originals", "Arki"]  │ Clothes         │   0.3459 │ 83777      │
+    └──────┴──────────────────────────────────────────┴────────────────────────────┴─────────────────┴──────────┴────────────┘
+    Showing 5 of 45 total matches.
     ```
 
 ### Other Useful Commands
