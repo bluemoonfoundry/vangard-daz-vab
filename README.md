@@ -137,6 +137,12 @@ Now for the fun part. Use the `query` command to search your library.
     python vab.py stats
     ```
 *   **`server`**: Run the API server for the upcoming web user interface.
+    ```cmd
+    python vab.py server
+    ```
+
+We hope this tool helps you rediscover the amazing assets in your collection!
+
 
 ### TODO:
 - Add support for third party content or content that has been manually installed.
@@ -144,8 +150,8 @@ Now for the fun part. Use the `query` command to search your library.
 
 
 
-    ```cmd
-    python vab.py server
-    ```
 
-We hope this tool helps you rediscover the amazing assets in your collection
+
+
+
+
