@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from output_formatters import print_pretty, print_json, print_table
-
+from collections import Counter
 import uvicorn
 from dotenv import load_dotenv
 
@@ -185,16 +185,29 @@ def stats_command(args):
     stats = get_db_stats()
     if stats is None:
         return
+    
+    #print (json.dumps(stats, indent=2))
 
     print("\n--- ChromaDB Collection Stats ---")
     print(f"Total Documents Indexed: {stats['total_docs']}")
     print(f"Last Document Update:    {stats['last_update']}")
     print("---------------------------------")
-    if stats["tag_histogram"]:
-        print("\n--- Top 25 Most Common Tags ---")
-        for tag, count in stats["tag_histogram"].most_common(25):
-            print(f"{tag:<30} | {count}")
-        print("-------------------------------")
+    
+    if stats["histograms"]:
+        
+        for key in stats["histograms"]:
+            #print (f"MARK {key} = {stats['histograms'][key]}")
+            histogram = list(stats["histograms"][key])
+            llen = len(histogram)
+            maxlen = llen
+            if llen > 0:
+                if llen > 25:
+                    llen=25
+
+                print (f"\n -- Category {key} {llen} of {maxlen}")
+                for tag, count in stats["histograms"][key].most_common(llen):
+                    print(f"{tag:<30} | {count}")
+                print("-------------------------------")
     else:
         print("\nNo tag information found.")
 
