@@ -1,6 +1,6 @@
 # Visual Asset Browser (VAB)
 
-Welcome to the Visual Asset Browser! This is a powerful command-line tool designed to help you create a "smart" search engine for your entire DAZ Studio content library, including both official DAZ Store products and third-party content.
+Welcome to the Visual Asset Browser! This is a powerful command-line tool designed to help you create a "smart" search engine for your entire DAZ Studio content librar.
 
 Instead of just searching by keywords, VAB lets you search by *meaning* or "vibe." You can ask it for "gritty cyberpunk outfits" or "elegant fantasy scenes" and get relevant results from your own collection.
 
@@ -137,6 +137,13 @@ Now for the fun part. Use the `query` command to search your library.
     python vab.py stats
     ```
 *   **`server`**: Run the API server for the upcoming web user interface.
+
+### TODO:
+- Add support for third party content or content that has been manually installed.
+
+
+
+
     ```cmd
     python vab.py server
     ```
