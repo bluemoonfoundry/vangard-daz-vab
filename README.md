@@ -180,6 +180,7 @@ We hope this tool helps you rediscover the amazing assets in your collection!
 
 ### TODO:
 - Add support for third party content or content that has been manually installed.
+- Wrap in a GUI shell so we don't need to use a command line and we don't have to repeatedly load the embedding model. Makes things go faster!
 
 
 
