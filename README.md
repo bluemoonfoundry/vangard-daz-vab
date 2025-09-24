@@ -54,6 +54,15 @@ We need to create a clean, isolated space for all of VAB's tools and libraries. 
     ```
     You will know it worked because your terminal prompt will change to show `(venv)` at the beginning.
 
+5. Configure the applicaton for your local environment
+
+   ```cmd
+   copy .env.example .env
+   ```
+   You will want to edit the .env file with your favorite editor (like Notepad) and change the two items that are marked "TODO":
+
+
+
 ### Step 4: Install the VAB Application
 
 Now that your workshop is ready, we can install the base application and its core dependencies.
