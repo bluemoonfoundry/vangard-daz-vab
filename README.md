@@ -94,13 +94,13 @@ Using VAB is a step-by-step process to build and search your index. Run all comm
 
 ### 1. Build Your Database
 
-First, you need to tell VAB about all your content.
+First, you need to tell VAB about all your content. Remember that DAZ Studio should be up and running before you start!
 
-*   **Fetch DAZ Content:** Run the `fetch` command. This will trigger your custom process to create the `products.json` file.
+*   **Fetch DAZ Content:** Run the `fetch` command. The scripts talks to DAZ Studio about all the products you've installed.
     ```cmd
     python vab.py fetch
     ```
-*   **Scrape Details:** Now, run `scrape` to gather the rich descriptions for your official DAZ products. This can take a long time if you have a large library.
+*   **Scrape Details:** Now, run `scrape` to gather the rich descriptions for your official DAZ products. This can take a long time if you have a large library, so please be patient. 
     ```cmd
     python vab.py scrape
     ```
