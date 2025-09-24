@@ -4,7 +4,8 @@ Welcome to the Visual Asset Browser! This is a powerful command-line tool design
 
 Instead of just searching by keywords, VAB lets you search by *meaning* or "vibe." You can ask it for "gritty cyberpunk outfits" or "elegant fantasy scenes" and get relevant results from your own collection.
 
-**(Optional: Insert a cool screenshot of your future React UI here to show them the ultimate goal)**
+This is an **example** of the kind of interfaces that could be supported:
+<img width="1482" height="768" alt="screenshot_med" src="https://github.com/user-attachments/assets/eb7fbd1c-8b56-404f-bb5d-ea682a6f9fb4" />
 
 ## Features
 
