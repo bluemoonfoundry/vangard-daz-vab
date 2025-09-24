@@ -26,7 +26,6 @@ This tool is built with Python. If you don't have it, you'll need to install it 
 1.  Go to the [official Python website's download page for Windows](https://www.python.org/downloads/windows/).
 2.  Download the installer for the latest Python 3.11.x version.
 3.  Run the installer. **IMPORTANT:** On the first screen of the installer, make sure to check the box at the bottom that says **"Add Python to PATH"**. This is crucial!
-    ![Add Python to PATH](https://docs.python.org/3/_images/win_installer.png)
 4.  Click "Install Now" and follow the prompts.
 
 ### Step 2: Download the VAB Project
