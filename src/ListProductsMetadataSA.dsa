@@ -3,6 +3,7 @@
 function ListProductsMetadataSA() {
 
     oOutputFile = App.scriptArgs[0];
+    sCheckPoint = App.scriptArgs[1];
 
     // Get the asset manager
     var oAssetMgr = App.getAssetMgr();

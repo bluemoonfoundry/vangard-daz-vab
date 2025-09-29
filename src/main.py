@@ -8,6 +8,7 @@ from collections import Counter
 import uvicorn
 from dotenv import load_dotenv
 
+from utilities import get_checkpoint, set_checkpoint
 from database_utils import load_sqlite_to_chroma
 #from enrich_data import main as run_enrichment
 from fetch_daz_data import pre_fetch_faz_data, fetch_daz_data
@@ -39,28 +40,11 @@ def slugify_regex(text: str) -> str:
     # 3. (Optional) Remove leading/trailing dashes that might be created
     return slug.strip("-")
 
-
-CHECKPOINT_FILE = ".checkpoint"
-
-
-def get_checkpoint():
-    if os.path.exists(CHECKPOINT_FILE):
-        with open(CHECKPOINT_FILE, "r") as f:
-            return f.read().strip()
-    return (datetime.now(timezone.utc) - timedelta(days=365 * 10)).isoformat()
-
-
-def set_checkpoint():
-    with open(CHECKPOINT_FILE, "w") as f:
-        f.write(datetime.now(timezone.utc).isoformat())
-    print(f"Checkpoint updated to {get_checkpoint()}")
-
-
 def fetch_command(args):
     print("Starting fetch command...")
     rv = pre_fetch_faz_data(args)
-    if rv and args.prefetch_only == False:
-        rv = fetch_daz_data(args)
+    # if rv and args.prefetch_only == False:
+    #     rv = fetch_daz_data(args)
     print("Fetch command complete.")
     return rv
 

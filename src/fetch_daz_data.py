@@ -1,7 +1,7 @@
 import json
 import os
 import pathlib
-from utilities import fetch_json_from_url, run_daz_script
+from utilities import fetch_json_from_url, run_daz_script, get_checkpoint, set_checkpoint
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,7 +13,7 @@ product_file = os.getenv("DAZ_PRODUCT_PATH", f"{script_directory}/products.json"
 def pre_fetch_faz_data(args):
 
     script_name = "ListProductsMetadataSA.dsa"
-    script_args = [product_file]
+    script_args = [product_file, get_checkpoint()]
     rv = run_daz_script(script_name, script_args)
     if not rv:
         print("Error: DAZ script execution failed.")
@@ -23,7 +23,7 @@ def pre_fetch_faz_data(args):
             print(f"Error: Expected output file '{product_file}' not found.")
             return False
         print(f"Wrote product metadata to {product_file}")
-
+        set_checkpoint()
     return True
 
 def fetch_daz_data(args):

@@ -2,8 +2,31 @@ import os
 import pathlib
 import subprocess
 import sys
-
+import datetime
+from datetime import timedelta, timezone
+from datetime import datetime
 import requests
+
+
+CHECKPOINT_FILE = ".checkpoint"
+
+
+def get_checkpoint():
+    rv=None
+    if os.path.exists(CHECKPOINT_FILE):
+        with open(CHECKPOINT_FILE, "r") as f:
+            rv = f.read().strip()
+    else:
+        rv = (datetime.now(timezone.utc) - timedelta(days=365 * 10)).isoformat()
+
+    print (f'Checkpoint read: {rv}')
+    return rv
+
+
+def set_checkpoint():
+    with open(CHECKPOINT_FILE, "w") as f:
+        f.write(datetime.now(timezone.utc).isoformat())
+    print(f"Checkpoint updated to {get_checkpoint()}")
 
 
 def run_daz_script(script_name: str, script_args:list) -> bool:
