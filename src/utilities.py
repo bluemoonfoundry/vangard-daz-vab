@@ -6,28 +6,38 @@ import datetime
 from datetime import timedelta, timezone
 from datetime import datetime
 import requests
+from sqlite_db_manager import SQLiteWrapper
 
+from dotenv import load_dotenv
+load_dotenv()
 
-CHECKPOINT_FILE = ".checkpoint"
+script_directory = pathlib.Path(__file__).parent.resolve()
+CHECKPOINT_FILE = os.getenv("CHECKPOINT_FILE", ".checkpoint")
+SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
+DAZ_EXTRACTED_PRODUCT_TABLE = "product"
+CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
+COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
+DAZ_EXTRACTED_PRODUCT_FILE = os.getenv("DAZ_PRODUCT_PATH", f"{script_directory}/products.json")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-embed-large-v1")
 
-
-def get_checkpoint():
-    rv=None
+sqlite_db = SQLiteWrapper(
+    sqlite_db_path  = SQLITE_DB_PATH,
+    sqlite_db_table = DAZ_EXTRACTED_PRODUCT_TABLE
+)
+    
+def get_checkpoint() -> str:
     if os.path.exists(CHECKPOINT_FILE):
         with open(CHECKPOINT_FILE, "r") as f:
-            rv = f.read().strip()
-    else:
-        rv = (datetime.now(timezone.utc) - timedelta(days=365 * 10)).isoformat()
-
-    print (f'Checkpoint read: {rv}')
-    return rv
-
+            return f.read().strip()
+    return "1970-01-01T00:00:00Z"
 
 def set_checkpoint():
     with open(CHECKPOINT_FILE, "w") as f:
         f.write(datetime.now(timezone.utc).isoformat())
-    print(f"Checkpoint updated to {get_checkpoint()}")
+    print("Checkpoint updated.")
 
+def get_sqlite_db() -> str:
+    return SQLITE_DB_PATH
 
 def run_daz_script(script_name: str, script_args:list) -> bool:
     """
@@ -63,20 +73,6 @@ def run_daz_script(script_name: str, script_args:list) -> bool:
 
         command_list.append(script_file)
 
-        # # Construct the script args
-        # script_args_parts = []
-        # for (i, arg) in enumerate(script_args):
-        #     script_args_parts.append (f"-scriptArg '{arg}'")
-
-        # script_args_complete = " ".join(script_args_parts)
-
-        # print(f"Executing DAZ Studio script: {script_file} {script_args_complete}")
-
-
-
-        # command_expanded = f"\"{daz_root}\" {script_args_complete} {script_file}"
-
-        #process = subprocess.Popen(command_expanded, shell=False)
         process = subprocess.Popen(
                 command_list,
                 stdout=subprocess.PIPE,

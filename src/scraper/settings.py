@@ -2,6 +2,8 @@
 
 # Scrapy settings for asset_scraper project
 
+from utilities import SQLITE_DB_PATH, DAZ_EXTRACTED_PRODUCT_TABLE
+
 BOT_NAME = "asset_scraper"
 
 # CHANGE THESE TWO LINES
@@ -36,14 +38,14 @@ TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 # The order is important: process the item first, then save it to the database.
 # Also update the ITEM_PIPELINES paths
 ITEM_PIPELINES = {
-    "scraper.pipelines.AssetProcessingPipeline": 300,  # <-- CHANGED
-    "scraper.pipelines.SQLitePipeline": 400,  # <-- CHANGED
+    "scraper.pipelines.AssetProcessingPipeline": 300,  
+    "scraper.pipelines.SQLitePipeline": 400,  
 }
 
 
 # --- Custom Settings for Pipelines ---
-SQLITE_DB = "products.db"
-SQLITE_TABLE = "product"
+SQLITE_DB = SQLITE_DB_PATH
+SQLITE_TABLE =  DAZ_EXTRACTED_PRODUCT_TABLE
 
 
 # --- Standard Scrapy Settings ---

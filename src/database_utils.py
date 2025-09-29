@@ -6,7 +6,11 @@ import sqlite3
 import chromadb
 from dotenv import load_dotenv
 
+
+############################## UNUSED FILE #####################################
+
 # Import the corrected embedding utility
+from utilities import SQLITE_DB_PATH, CHROMA_DB_PATH, COLLECTION_NAME
 from embedding_utils import generate_embeddings
 
 
@@ -19,16 +23,16 @@ def _clean_metadata(item: dict) -> dict:
     return clean
 
 
-def load_sqlite_to_chroma(sqlite_db_path: str, checkpoint_date: str):
+def load_sqlite_to_chroma(checkpoint_date: str):
     """
     Finds new/updated products in SQLite, generates embeddings for them,
     and upserts them into ChromaDB.
     """
     print(
-        f"Loading products from '{sqlite_db_path}' updated after {checkpoint_date}..."
+        f"Loading products from '{SQLITE_DB_PATH}' updated after {checkpoint_date}..."
     )
     try:
-        conn = sqlite3.connect(sqlite_db_path)
+        conn = sqlite3.connect(SQLITE_DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -50,8 +54,6 @@ def load_sqlite_to_chroma(sqlite_db_path: str, checkpoint_date: str):
 
     print(f"Found {len(products_to_load)} products to process and load.")
 
-    # --- THIS IS THE CORRECTED LOGIC ---
-
     # 1. Prepare data for embedding and for ChromaDB
     texts_to_embed = [p["embedding_text"] for p in products_to_load]
     ids_to_upsert = [str(p["sku"]) for p in products_to_load]
@@ -66,9 +68,6 @@ def load_sqlite_to_chroma(sqlite_db_path: str, checkpoint_date: str):
     print("Embeddings generated successfully.")
 
     # 3. Connect to ChromaDB and upsert the complete data
-    load_dotenv()
-    CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-    COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"}

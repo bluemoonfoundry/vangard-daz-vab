@@ -2,7 +2,8 @@ import json
 import os
 from datetime import datetime, timezone
 
-from database_utils import load_sqlite_to_chroma
+from utilities import get_checkpoint, set_checkpoint, DAZ_EXTRACTED_PRODUCT_FILE
+from rebuild_chroma import load_sqlite_to_chroma
 from scraper_process import run_scraper
 
 
@@ -10,24 +11,6 @@ def run_fetch_process():
     print("Simulating external fetch process...")
     # TODO: Replace with your actual library call.
     return True
-
-
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
-CHECKPOINT_FILE = ".checkpoint"
-
-
-def get_checkpoint():
-    if os.path.exists(CHECKPOINT_FILE):
-        with open(CHECKPOINT_FILE, "r") as f:
-            return f.read().strip()
-    return "1970-01-01T00:00:00Z"
-
-
-def set_checkpoint():
-    with open(CHECKPOINT_FILE, "w") as f:
-        f.write(datetime.now(timezone.utc).isoformat())
-    print("Checkpoint updated.")
-
 
 def run_update_flow(task_status: dict):
     try:
@@ -44,10 +27,10 @@ def run_update_flow(task_status: dict):
 
         task_status["stage"] = "scrape"
         try:
-            with open("products.json", "r") as f:
+            with open(DAZ_EXTRACTED_PRODUCT_FILE, "r") as f:
                 products = json.load(f)
         except FileNotFoundError:
-            raise RuntimeError("products.json not found.")
+            raise RuntimeError(f"Product file {DAZ_EXTRACTED_PRODUCT_FILE} not found.")
 
         checkpoint = get_checkpoint()
         urls_to_scrape = [
@@ -66,7 +49,7 @@ def run_update_flow(task_status: dict):
 
         task_status["stage"] = "load"
         task_status["progress"] = "Loading new data into ChromaDB..."
-        load_sqlite_to_chroma(SQLITE_DB_PATH, checkpoint)
+        load_sqlite_to_chroma(checkpoint, rebuild=False)
         set_checkpoint()
         task_status["progress"] = "Load complete."
 

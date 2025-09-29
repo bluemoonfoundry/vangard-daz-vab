@@ -9,45 +9,22 @@ import uvicorn
 from dotenv import load_dotenv
 
 from utilities import get_checkpoint, set_checkpoint
-from database_utils import load_sqlite_to_chroma
-#from enrich_data import main as run_enrichment
 from fetch_daz_data import pre_fetch_faz_data, fetch_daz_data
 from fetch_daz_data import product_file
 from query_utils import get_db_stats, search
-from rebuild_chroma import main as run_rebuild
+from rebuild_chroma import load_sqlite_to_chroma
 from scraper_process import run_scraper
 
 load_dotenv()
 
-
-def slugify_regex(text: str) -> str:
-    """
-    Downcases a string and replaces all whitespace sequences with a dash
-    using regular expressions.
-
-    Args:
-        text: The input string to be processed.
-
-    Returns:
-        A slug version of the string.
-    """
-    # 1. Convert to lowercase
-    lower_text = text.lower()
-
-    # 2. Replace one or more whitespace characters (\s+) with a single dash
-    slug = re.sub(r"\s+", "-", lower_text)
-
-    # 3. (Optional) Remove leading/trailing dashes that might be created
-    return slug.strip("-")
-
-def fetch_command(args):
-    print("Starting fetch command...")
+def pre_fetch_command(args):
+    print("Starting prefetch command...")
     rv = pre_fetch_faz_data(args)
-    # if rv and args.prefetch_only == False:
-    #     rv = fetch_daz_data(args)
-    print("Fetch command complete.")
+    print("Prefetch command complete.")
     return rv
 
+def fetch_command(args):
+    return fetch_daz_data(args)
 
 def scrape_command(args):
     print("Starting scrape command...")
@@ -111,7 +88,7 @@ def scrape_command(args):
 def enrich_command(args):
     #print("Starting LLM data enrichment process...")
     #run_enrichment(args)
-    print
+    print ("Enrichment is not currently supported!")
 
 
 def rebuild_command(args):
@@ -127,15 +104,15 @@ def rebuild_command(args):
     )
     if confirm.lower() == "yes":
         print("Starting full ChromaDB rebuild...")
-        run_rebuild()
+        load_sqlite_to_chroma(checkpoint_date=None, rebuild=True)
     else:
         print("Rebuild cancelled.")
-
+    set_checkpoint()
 
 def load_command(args):
     print("Starting load command...")
-    checkpoint = get_checkpoint()
-    load_sqlite_to_chroma(checkpoint) # type: ignore
+    checkpoint_date = get_checkpoint()
+    load_sqlite_to_chroma(checkpoint_date, rebuild=False) # type: ignore
     set_checkpoint()
 
 
@@ -221,18 +198,28 @@ def main():
     parser = argparse.ArgumentParser(
         description="Visual Asset Browser Data Pipeline CLI"
     )
+    # parser.add_argument(
+    #     "--product-file",
+    #     type=str,
+    #     default="./products.json",
+    #     help="Path to JSON file containing product data.",
+    # )
+
     parser.add_argument(
-        "--product-file",
-        type=str,
-        default="./products.json",
-        help="Path to JSON file containing product data.",
+        "--update",
+        action="store_true",
+        help="Only apply command to products that are not processed previously",
     )
+
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Define commands
     parsers = {
+        "prefetch": subparsers.add_parser(
+            "prefetch", help="Calls external library to create/update products.json."
+        ),
         "fetch": subparsers.add_parser(
-            "fetch", help="Calls external library to create/update products.json."
+            "fetch", help="Loads external content from product pages for products in products.json"
         ),
         "scrape": subparsers.add_parser(
             "scrape", help="Scrape products and save to SQLite."
@@ -260,20 +247,17 @@ def main():
     }
 
     # Add arguments
-    parsers["scrape"].add_argument(
-        "--update",
-        action="store_true",
-        help="Only scrape products newer than the last checkpoint.",
-    )
+    # parsers["scrape"].add_argument(
+    #     "--update",
+    #     action="store_true",
+    #     help="Only scrape products newer than the last checkpoint.",
+    # )
     parsers["scrape"].add_argument(
         "--limit",
         type=int,
         default=None,
         help="Limit the number of URLs to process from the list.",
     )
-
-    parsers["fetch"].add_argument("--prefetch-only", action="store_true", default=False,
-                                  help="Only fetch DAZ product metadata, do execute full database construction.")
 
     parsers["query"].add_argument("prompt", help="The search prompt.")
     parsers["query"].add_argument(
@@ -314,6 +298,7 @@ def main():
 
     # Set default functions
     func_map = {
+        "prefetch": pre_fetch_command,
         "fetch": fetch_command,
         "scrape": scrape_command,
         "enrich": enrich_command,

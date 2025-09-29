@@ -4,10 +4,9 @@ from collections import Counter
 from typing import List, Optional
 
 import chromadb
-from dotenv import load_dotenv
-
-# Import the centralized embedding utility
 from embedding_utils import generate_embeddings
+
+from utilities import COLLECTION_NAME, CHROMA_DB_PATH
 
 
 def build_where_clause(
@@ -79,10 +78,6 @@ def search(
     """
     Performs a hybrid search with multiple, faceted metadata filters.
     """
-    load_dotenv()
-    CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-    COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     try:
         collection = client.get_collection(name=COLLECTION_NAME)
@@ -153,10 +148,6 @@ def get_db_stats():
     """
     Gathers and returns statistics and histograms for all key filterable fields.
     """
-    load_dotenv()
-    CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-    COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     try:
         collection = client.get_collection(name=COLLECTION_NAME)

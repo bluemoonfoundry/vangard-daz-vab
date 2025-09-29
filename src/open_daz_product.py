@@ -1,8 +1,5 @@
 import pathlib
 from utilities import run_daz_script
-from dotenv import load_dotenv
-
-load_dotenv()
 
 script_directory = pathlib.Path(__file__).parent.resolve()
 

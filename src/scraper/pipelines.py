@@ -5,6 +5,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
+from utilities import sqlite_db
 
 def clean_list_field(items):
     """Helper function to strip whitespace from a list of strings."""
@@ -89,55 +90,61 @@ class SQLitePipeline:
     It uses INSERT OR REPLACE to handle updates to existing products.
     """
 
-    def __init__(self, sqlite_db, sqlite_table):
-        self.sqlite_db = sqlite_db
-        self.sqlite_table = sqlite_table
+    # def __init__(self):
+        # self.sqlite_db = sqlite_db
+        # self.sqlite_table = sqlite_table
 
     @classmethod
     def from_crawler(cls, crawler):
-        return cls(
-            sqlite_db=crawler.settings.get("SQLITE_DB", "products.db"),
-            sqlite_table=crawler.settings.get("SQLITE_TABLE", "product"),
-        )
+        return cls()
+    
+        #     sqlite_db=crawler.settings.get("SQLITE_DB", "products.db"),
+        #     sqlite_table=crawler.settings.get("SQLITE_TABLE", "product"),
+        # )
 
     def open_spider(self, spider):
-        self.conn = sqlite3.connect(self.sqlite_db)
-        self.cursor = self.conn.cursor()
-        # Create the table with all possible columns, including those for later enrichment.
-        self.cursor.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {self.sqlite_table} (
-                sku TEXT PRIMARY KEY,
-                url TEXT,
-                image_url TEXT
-                store TEXT,
-                name TEXT,
-                artist TEXT,
-                price TEXT,
-                description TEXT,
-                tags TEXT,
-                formats TEXT,
-                poly_count TEXT,
-                textures_info TEXT,
-                required_products TEXT,
-                compatible_figures TEXT,
-                compatible_software TEXT,
-                embedding_text TEXT,
-                last_updated TEXT,
-                -- Columns for LLM enrichment
-                category TEXT,
-                subcategories TEXT,
-                styles TEXT,
-                inferred_tags TEXT,
-                enriched_at TEXT,
-                mature INTEGER
-            )
-        """
-        )
-        self.conn.commit()
+        self.connection = sqlite_db.connection
+        self.cursor = sqlite_db.connection.cursor()
+        # We will assume that the SQL lite instance has already handled table initialization
+        # self.conn = sqlite3.connect(self.sqlite_db)
+        # self.cursor = self.conn.cursor()
+        # # Create the table with all possible columns, including those for later enrichment.
+        # self.cursor.execute(
+        #     f"""
+        #     CREATE TABLE IF NOT EXISTS {self.sqlite_table} (
+        #         sku TEXT PRIMARY KEY,
+        #         url TEXT,
+        #         image_url TEXT
+        #         store TEXT,
+        #         name TEXT,
+        #         artist TEXT,
+        #         price TEXT,
+        #         description TEXT,
+        #         tags TEXT,
+        #         formats TEXT,
+        #         poly_count TEXT,
+        #         textures_info TEXT,
+        #         required_products TEXT,
+        #         compatible_figures TEXT,
+        #         compatible_software TEXT,
+        #         embedding_text TEXT,
+        #         last_updated TEXT,
+        #         -- Columns for LLM enrichment
+        #         category TEXT,
+        #         subcategories TEXT,
+        #         styles TEXT,
+        #         inferred_tags TEXT,
+        #         enriched_at TEXT,
+        #         mature INTEGER
+        #     )
+        # """
+        # )
+        # self.conn.commit()
+        pass
 
     def close_spider(self, spider):
-        self.conn.close()
+        # self.conn.close()
+        pass
 
     def process_item(self, item, spider):
         # Convert any list fields to JSON strings for database storage
@@ -151,11 +158,12 @@ class SQLitePipeline:
         # Prepare columns and placeholders for a robust upsert operation
         columns = ", ".join(item.keys())
         placeholders = ", ".join(["?"] * len(item))
-        sql = f"INSERT OR REPLACE INTO {self.sqlite_table} ({columns}) VALUES ({placeholders})"
+        table = sqlite_db.sqlite_db_table
+        sql = f"INSERT OR REPLACE INTO {table} ({columns}) VALUES ({placeholders})"
 
         try:
             self.cursor.execute(sql, list(item.values()))
-            self.conn.commit()
+            self.connection.commit()
             spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
         except Exception as e:
             spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")

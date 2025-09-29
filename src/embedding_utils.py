@@ -2,11 +2,8 @@
 
 import os
 
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-
-# Load environment variables once
-load_dotenv()
+from utilities import EMBEDDING_MODEL_NAME
 
 # --- Global Model Cache ---
 # This ensures the model is only loaded into memory once per process.
@@ -21,12 +18,9 @@ def get_embedding_model():
     global _model
     if _model is None:
         # Default to the recommended model if not specified in .env
-        model_name = os.getenv(
-            "EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-embed-large-v1"
-        )
-        print(f"--- Loading embedding model: {model_name} ---")
+        print(f"--- Loading embedding model: {EMBEDDING_MODEL_NAME} ---")
         # You can specify the device, e.g., device='cuda', if you have a GPU
-        _model = SentenceTransformer(model_name)
+        _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         print("--- Embedding model loaded. ---")
     return _model
 
@@ -45,13 +39,9 @@ def generate_embeddings(texts, is_query: bool = False):
     """
     model = get_embedding_model()
 
-    # Some models, like mxbai, recommend a specific prefix for queries
-    # to improve retrieval performance.
-    model_name = os.getenv("EMBEDDING_MODEL_NAME", "")
+    print(f"+++ Using {EMBEDDING_MODEL_NAME} for embedding +++")
 
-    print(f"+++ Using {model_name} for embedding +++")
-
-    if "mxbai" in model_name and is_query:
+    if "mxbai" in EMBEDDING_MODEL_NAME and is_query:
         # Ensure that if a list is passed, we prefix each item
         if isinstance(texts, list):
             texts = [
