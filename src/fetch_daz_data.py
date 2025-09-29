@@ -74,6 +74,10 @@ def fetch_daz_data(args):
                     print(
                         f"Info: Computed DAZ Store URL for '{product['title']}' as '{product['url']}' with image_url '{image_url}'."
                     )
+
+                    # We should be able to insert a row into the Sqlite database at this point, to create the base 
+                    # information about a product 
+                    
             else:
                 print(
                     f"Warning: No URL computable for '{product['title']}' (Store ID: {product['store_id']})."

@@ -147,25 +147,31 @@ class SQLitePipeline:
         pass
 
     def process_item(self, item, spider):
-        # Convert any list fields to JSON strings for database storage
-        for key, value in item.items():
-            if isinstance(value, list):
-                item[key] = json.dumps(value)
 
-        # Add the update timestamp
-        item["last_updated"] = datetime.now(timezone.utc).isoformat()
-
-        # Prepare columns and placeholders for a robust upsert operation
-        columns = ", ".join(item.keys())
-        placeholders = ", ".join(["?"] * len(item))
-        table = sqlite_db.sqlite_db_table
-        sql = f"INSERT OR REPLACE INTO {table} ({columns}) VALUES ({placeholders})"
-
-        try:
-            self.cursor.execute(sql, list(item.values()))
-            self.connection.commit()
-            spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
-        except Exception as e:
+        if sqlite_db.insert_items(item):
+             spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
+        else:
             spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")
 
         return item
+
+        # # Convert any list fields to JSON strings for database storage
+        # for key, value in item.items():
+        #     if isinstance(value, list):
+        #         item[key] = json.dumps(value)
+
+        # # Add the update timestamp
+        # item["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+        # # Prepare columns and placeholders for a robust upsert operation
+        # columns = ", ".join(item.keys())
+        # placeholders = ", ".join(["?"] * len(item))
+        # table = sqlite_db.sqlite_db_table
+        # sql = f"INSERT OR REPLACE INTO {table} ({columns}) VALUES ({placeholders})"
+
+        # try:
+        #     self.cursor.execute(sql, list(item.values()))
+        #     self.connection.commit()
+        #     spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
+        # except Exception as e:
+        #     spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")
