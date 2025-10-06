@@ -6,7 +6,10 @@ from typing import List, Optional
 import chromadb
 from embedding_utils import generate_embeddings
 
-from utilities import COLLECTION_NAME, CHROMA_DB_PATH
+#from utilities import COLLECTION_NAME, CHROMA_DB_PATH
+
+from managers.managers import chroma_db_manager
+
 
 
 def build_where_clause(
@@ -78,12 +81,12 @@ def search(
     """
     Performs a hybrid search with multiple, faceted metadata filters.
     """
-    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    try:
-        collection = client.get_collection(name=COLLECTION_NAME)
-    except ValueError:
-        print(f"Warning: ChromaDB collection '{COLLECTION_NAME}' not found.")
-        return {"total_hits": 0, "limit": limit, "offset": offset, "results": []}
+    # client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    # try:
+    #     collection = client.get_collection(name=COLLECTION_NAME)
+    # except ValueError:
+    #     print(f"Warning: ChromaDB collection '{COLLECTION_NAME}' not found.")
+    #     return {"total_hits": 0, "limit": limit, "offset": offset, "results": []}
 
     # --- 1. Generate Query Embedding ---
     query_embedding = generate_embeddings(prompt, is_query=True)
@@ -102,12 +105,15 @@ def search(
     query_limit = (offset + limit) * 5 + 20  # A generous buffer
 
     # --- 3. Query ChromaDB ---
-    results = collection.query(
+
+    results = chroma_db_manager.query(
         query_embeddings=[query_embedding.tolist()],
         n_results=query_limit,
         where=where_filter,
         include=["metadatas", "distances"],
     )
+
+    #print (f'DEBUG: Result set = {results}')
 
     # --- 4. Post-process Results (Filtering by Score) ---
     processed_results = []
@@ -123,6 +129,8 @@ def search(
                     }
                 )
 
+    #print (f'DEBUG: Result set = {processed_results}')
+
     # --- 5. Sorting Logic ---
     reverse_order = sort_order == "descending"
     if sort_by != "relevance":
@@ -136,6 +144,8 @@ def search(
     # --- 6. Apply Pagination and Return ---
     paginated_results = processed_results[offset : offset + limit]
 
+    print (f'DEBUG: Result set = {len(paginated_results)}')
+
     return {
         "total_hits": len(processed_results),
         "limit": limit,
@@ -144,62 +154,4 @@ def search(
     }
 
 
-def get_db_stats():
-    """
-    Gathers and returns statistics and histograms for all key filterable fields.
-    """
-    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    try:
-        collection = client.get_collection(name=COLLECTION_NAME)
-    except ValueError:
-        return None
 
-    total_docs = collection.count()
-    if total_docs == 0:
-        return {"total_docs": 0, "last_update": "N/A", "histograms": {}}
-
-    all_metadatas = collection.get(include=["metadatas"])["metadatas"]
-
-    # Initialize Counters for Histograms
-    tag_counter, artist_counter, figure_counter, category_counter = (
-        Counter(),
-        Counter(),
-        Counter(),
-        Counter(),
-    )
-
-    # Find the Last Update Date
-    last_update_dates = [
-        meta.get("last_updated") for meta in all_metadatas if meta.get("last_updated")
-    ]
-    last_update = max(last_update_dates) if last_update_dates else "N/A"
-
-    # Iterate and Process All Metadata
-    for meta in all_metadatas:
-        if category := meta.get("category"):
-            category_counter.update([category])
-
-        def parse_and_update_counter(field_name: str, counter: Counter):
-            json_string = meta.get(field_name)
-            if json_string:
-                try:
-                    item_list = json.loads(json_string)
-                    if isinstance(item_list, list):
-                        counter.update(item_list)
-                except (json.JSONDecodeError, TypeError):
-                    pass  # Ignore malformed data
-
-        parse_and_update_counter("tags", tag_counter)
-        parse_and_update_counter("artist", artist_counter)
-        parse_and_update_counter("compatible_figures", figure_counter)
-
-    return {
-        "total_docs": total_docs,
-        "last_update": last_update,
-        "histograms": {
-            "tags": tag_counter,
-            "artists": artist_counter,
-            "compatible_figures": figure_counter,
-            "categories": category_counter,
-        },
-    }

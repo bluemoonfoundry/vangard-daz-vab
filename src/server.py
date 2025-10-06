@@ -10,7 +10,13 @@ from api_tasks import run_update_flow
 from demo_data import get_demo_search_results as search_mock
 from demo_data import get_demo_stats as get_demo_stats_mock
 from open_daz_product import main as open_daz_product
-from query_utils import get_db_stats, search
+#from query_utils import get_db_stats, search
+
+from managers.managers import chroma_db_manager
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 APP_MODE = os.getenv("APP_MODE", "production")
 app = FastAPI(
@@ -39,6 +45,13 @@ class QueryRequest(BaseModel):
     sort_by: str = "relevance"
     sort_order: str = Field("descending", pattern="^(ascending|descending)$")
 
+@app.get("/")
+async def root():
+    import logging
+    logger = logging.getLogger(__name__)
+    print("Hello from the simple FastAPI app!")
+    return {"message": "Hello"}    
+
 @app.post("/api/v1/update", status_code=202)
 def start_update(background_tasks: BackgroundTasks):
     if APP_MODE == "demo":
@@ -65,11 +78,15 @@ def get_update_status(task_id: str):
 def run_query(request: QueryRequest):
     print(f"Received query request: {request}")
     print(f"model dump: {request.model_dump()}")
-    return (
+    result = (
         search_mock(**request.model_dump())
         if APP_MODE == "demo"
-        else search(**request.model_dump())
+        else chroma_db_manager.search(**request.model_dump())
     )
+
+    with open('test.json', 'w') as f:
+        f.write (f'RECV Result = {result}')
+    return result
 
 
 @app.get("/api/v1/browseproduct/{product_id}")
@@ -85,22 +102,28 @@ def get_info():
     Runs the stats command and returns the result as a JSON document,
     including histograms for filterable fields.
     """
+
+
     # --- DEMO MODE CHECK ---
     if APP_MODE == "demo":
         print("--- DEMO MODE: Returning mock database stats. ---")
         # We need to update the demo_data file to return this new structure
         return get_demo_stats_mock()
 
+
     # --- PRODUCTION MODE ---
-    stats = get_db_stats()
+    stats = chroma_db_manager.get_db_stats()
     if stats is None:
         raise HTTPException(
             status_code=404, detail="Database collection not found or empty."
         )
 
+
+
     # Convert all Counter objects in the histograms to regular dictionaries
     if "histograms" in stats and stats["histograms"]:
         for key, counter in stats["histograms"].items():
             stats["histograms"][key] = dict(counter)
+
 
     return stats

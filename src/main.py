@@ -1,88 +1,61 @@
 import argparse
 import json
 import os
-import re
-from datetime import datetime, timedelta, timezone
-from output_formatters import print_pretty, print_json, print_table
-from collections import Counter
-import uvicorn
-from dotenv import load_dotenv
 
-from utilities import get_checkpoint, set_checkpoint
-from fetch_daz_data import pre_fetch_faz_data, fetch_daz_data
-from fetch_daz_data import product_file
-from query_utils import get_db_stats, search
-from rebuild_chroma import load_sqlite_to_chroma
+from utilities import get_checkpoint, set_checkpoint, compare_datetime_strings, DAZ_EXTRACTED_PRODUCT_FILE
+
+from output_formatters import print_pretty, print_json, print_table
+import uvicorn
+
 from scraper_process import run_scraper
 
-load_dotenv()
+from managers.managers import daz_db_manager, chroma_db_manager, sqlite_db
 
-def pre_fetch_command(args):
-    print("Starting prefetch command...")
-    rv = pre_fetch_faz_data(args)
-    print("Prefetch command complete.")
-    return rv
 
 def fetch_command(args):
-    return fetch_daz_data(args)
+#     #daz_db_manager.pre_fetch_faz_data()
+#     extract_daz_content()
+    pass    
 
 def scrape_command(args):
     print("Starting scrape command...")
-    dbfile = product_file
+    # dbfile = DAZ_EXTRACTED_PRODUCT_FILE
 
-    try:
-        with open(dbfile, "r") as f:
-            products = json.load(f)
-            print(f"Loaded {len(products)} products from {dbfile}.")
-    except FileNotFoundError:
-        print("Error: products.json not found. Run the 'fetch' command first.")
-        return
+    # try:
+    #     with open(dbfile, "r") as f:
+    #         products = json.load(f)
+    #         print(f"Loaded {len(products)} products from {dbfile}.")
+    # except FileNotFoundError:
+    #     print("Error: products.json not found. Run the 'fetch' command first.")
+    #     return
 
-    # --- THIS IS THE KEY CHANGE ---
-    # We now build a list of dictionaries, not just URLs.
-    products_to_scrape = []
-    if args.update:
-        checkpoint = get_checkpoint()
-        print(f"Update mode enabled. Scraping products installed after {checkpoint}.")
-        for product in products:
-            if product.get("date_installed", "1970-01-01T00:00:00Z") > checkpoint:
-                if product.get("url") and product.get("sku"):
-                    products_to_scrape.append(
-                        {
-                            "url": product["url"],
-                            "image_url": product["image_url"],
-                            "sku": product["sku"],
-                            "categoriesData": product.get("categoriesData", []),
-                            "figureData": product.get("figureData", []),
-                            "mature": product.get("mature", False),
-                        }
-                    )
-    else:
-        print("Update mode off. Scraping all products from products.json.")
-        products_to_scrape = [
-            {
-                "url": p["url"],
-                "image_url": p["image_url"],
-                "sku": p["sku"],
-                "categoriesData": p.get("categoriesData", []),
-                "figureData": p.get("figureData", []),
-                "mature": p.get("mature", False),
-            }
-            for p in products
-            if p.get("url") and p.get("sku")
-        ]
+    daz_db_manager.extract_daz_content(args.all)
+   
+    # # We only scrape products more recent than the most current checkpoint. If we want 
+    # # to scrape all products we have to explicitly say so in the product args or 
+    # # remove the checkpoint file 
+    # products_to_scrape = []
+    
+    # if not args.all:
+    #     checkpoint = get_checkpoint()
+    #     print(f"Update mode enabled. Scraping products installed after {checkpoint}.")
+    # else:
+    #     checkpoint = "1970-01-01T00:00:00Z"
 
-    if args.limit and args.limit > 0:
-        print(
-            f"Applying limit: processing only the first {args.limit} of {len(products_to_scrape)} products."
-        )
-        products_to_scrape = products_to_scrape[: args.limit]
+    # products_to_scrape = sqlite_db.get_post_checkpoint_rows(columns = "url, image_url, sku, mature", checkpoint=checkpoint)
 
-    if products_to_scrape:
-        # Pass the entire list of product dicts
-        run_scraper(products_to_scrape)
-    else:
-        print("No new products to scrape based on the determined criteria.")
+    # if args.limit and args.limit > 0:
+    #     print(
+    #         f"Applying limit: processing only the first {args.limit} of {len(products_to_scrape)} products."
+    #     )
+    #     products_to_scrape = products_to_scrape[: args.limit]
+
+    # print (f'#### Product scrape count = {len(products_to_scrape)}')
+
+    # if len(products_to_scrape) > 0:
+    #     run_scraper(products_to_scrape)
+    # else:
+    #     print("No new products to scrape based on the determined criteria.")
 
 
 def enrich_command(args):
@@ -104,7 +77,7 @@ def rebuild_command(args):
     )
     if confirm.lower() == "yes":
         print("Starting full ChromaDB rebuild...")
-        load_sqlite_to_chroma(checkpoint_date=None, rebuild=True)
+        chroma_db_manager.load_sqlite_to_chroma(checkpoint_date=None, rebuild=True)
     else:
         print("Rebuild cancelled.")
     set_checkpoint()
@@ -112,8 +85,8 @@ def rebuild_command(args):
 def load_command(args):
     print("Starting load command...")
     checkpoint_date = get_checkpoint()
-    load_sqlite_to_chroma(checkpoint_date, rebuild=False) # type: ignore
-    set_checkpoint()
+    if chroma_db_manager.load_sqlite_to_chroma(checkpoint_date, rebuild=False):
+        set_checkpoint()
 
 
 def query_command(args):
@@ -121,7 +94,7 @@ def query_command(args):
     print("Starting query command...")
 
     # The search function returns a dictionary with 'total_hits', 'results', etc.
-    response = search(
+    response = chroma_db_manager.search(
         prompt=args.prompt,
         tags=args.tags,
         limit=args.limit,
@@ -143,7 +116,7 @@ def query_command(args):
 
 def stats_command(args):
     print("Gathering statistics from the database...")
-    stats = get_db_stats()
+    stats = chroma_db_manager.get_db_stats()
     if stats is None:
         return
     
@@ -198,12 +171,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Visual Asset Browser Data Pipeline CLI"
     )
-    # parser.add_argument(
-    #     "--product-file",
-    #     type=str,
-    #     default="./products.json",
-    #     help="Path to JSON file containing product data.",
-    # )
 
     parser.add_argument(
         "--update",
@@ -215,9 +182,6 @@ def main():
 
     # Define commands
     parsers = {
-        "prefetch": subparsers.add_parser(
-            "prefetch", help="Calls external library to create/update products.json."
-        ),
         "fetch": subparsers.add_parser(
             "fetch", help="Loads external content from product pages for products in products.json"
         ),
@@ -246,17 +210,17 @@ def main():
         ),
     }
 
-    # Add arguments
-    # parsers["scrape"].add_argument(
-    #     "--update",
-    #     action="store_true",
-    #     help="Only scrape products newer than the last checkpoint.",
-    # )
     parsers["scrape"].add_argument(
         "--limit",
         type=int,
         default=None,
         help="Limit the number of URLs to process from the list.",
+    )
+    parsers["scrape"].add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Scrape all products, ignoring the checkpoint file",
     )
 
     parsers["query"].add_argument("prompt", help="The search prompt.")
@@ -298,7 +262,6 @@ def main():
 
     # Set default functions
     func_map = {
-        "prefetch": pre_fetch_command,
         "fetch": fetch_command,
         "scrape": scrape_command,
         "enrich": enrich_command,

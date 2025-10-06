@@ -25,9 +25,7 @@ function ListProductsMetadataSA() {
     var oIntermediate, oProduct;
     var nProducts;
     var lOutputBucket=[]
-
-    var oFile = DzFile(oOutputFile);
-    oFile.open(DzFile.ReadWrite);
+    //var lDeepBucket=[]
 
     // Get the number of intermediate containers; alpha-numeric sorting
     var nIntermediates = oProductsTop.getNumChildContainers();
@@ -52,18 +50,36 @@ function ListProductsMetadataSA() {
                 'store_id': oProduct.storeID,
                 'installed': oProduct.isInstalled,
                 'date_last_updated': oProduct.dateLastUpdated,
-                'date_installed': oProduct.dateInstalled
+                'date_installed': oProduct.dateInstalled,
+                'raw_artists': oProduct.artistNames,
+                'raw_categories': oProduct.getCategories(),
+                'raw_metadata': oProduct.getMetadataXML()
             }
 
-            lOutputBucket.push(oItem)	    
-            
+            lOutputBucket.push(oItem)	   
+                        
+            // if (lOutputBucket.length < 50) {
+            //     lDeepBucket.push(oProduct);
+            // } else {
+            //     break;
+            // }
         }		
     }
 
-    oFile.write(JSON.stringify(lOutputBucket));    
+    // var subfile = "y:/working/scripting/vangard-daz-browser/fullset.json"
+    // var xFile = DzFile(subfile);
+    // xFile.open(DzFile.ReadWrite);
+    // xFile.write(JSON.stringify(lDeepBucket)); 
+    // xFile.close();
 
+    // print ("Wrote sub file ", subfile, " of ", lDeepBucket.length, " objects");
+
+
+    var oFile = DzFile(oOutputFile);
+    oFile.open(DzFile.ReadWrite);
+    oFile.write(JSON.stringify(lOutputBucket));    
     oFile.close();
-    
     print( "Wrote", lOutputBucket.length, "products to", oOutputFile );}
+
 
 ListProductsMetadataSA();

@@ -39,3 +39,6 @@ rich
 #
 # playwright install
 
+browse
+bs4
+readability-lxml

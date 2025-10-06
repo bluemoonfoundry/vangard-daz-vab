@@ -3,8 +3,9 @@ import os
 from datetime import datetime, timezone
 
 from utilities import get_checkpoint, set_checkpoint, DAZ_EXTRACTED_PRODUCT_FILE
-from rebuild_chroma import load_sqlite_to_chroma
 from scraper_process import run_scraper
+
+from managers.managers import chroma_db_manager
 
 
 def run_fetch_process():
@@ -49,7 +50,7 @@ def run_update_flow(task_status: dict):
 
         task_status["stage"] = "load"
         task_status["progress"] = "Loading new data into ChromaDB..."
-        load_sqlite_to_chroma(checkpoint, rebuild=False)
+        chroma_db_manager.load_sqlite_to_chroma(checkpoint, rebuild=False)
         set_checkpoint()
         task_status["progress"] = "Load complete."
 

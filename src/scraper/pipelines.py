@@ -5,7 +5,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from utilities import sqlite_db
+from managers.managers import sqlite_db
 
 def clean_list_field(items):
     """Helper function to strip whitespace from a list of strings."""
@@ -105,41 +105,6 @@ class SQLitePipeline:
     def open_spider(self, spider):
         self.connection = sqlite_db.connection
         self.cursor = sqlite_db.connection.cursor()
-        # We will assume that the SQL lite instance has already handled table initialization
-        # self.conn = sqlite3.connect(self.sqlite_db)
-        # self.cursor = self.conn.cursor()
-        # # Create the table with all possible columns, including those for later enrichment.
-        # self.cursor.execute(
-        #     f"""
-        #     CREATE TABLE IF NOT EXISTS {self.sqlite_table} (
-        #         sku TEXT PRIMARY KEY,
-        #         url TEXT,
-        #         image_url TEXT
-        #         store TEXT,
-        #         name TEXT,
-        #         artist TEXT,
-        #         price TEXT,
-        #         description TEXT,
-        #         tags TEXT,
-        #         formats TEXT,
-        #         poly_count TEXT,
-        #         textures_info TEXT,
-        #         required_products TEXT,
-        #         compatible_figures TEXT,
-        #         compatible_software TEXT,
-        #         embedding_text TEXT,
-        #         last_updated TEXT,
-        #         -- Columns for LLM enrichment
-        #         category TEXT,
-        #         subcategories TEXT,
-        #         styles TEXT,
-        #         inferred_tags TEXT,
-        #         enriched_at TEXT,
-        #         mature INTEGER
-        #     )
-        # """
-        # )
-        # self.conn.commit()
         pass
 
     def close_spider(self, spider):
@@ -147,21 +112,13 @@ class SQLitePipeline:
         pass
 
     def process_item(self, item, spider):
+        # Convert any list fields to JSON strings for database storage
+        for key, value in item.items():
+            if isinstance(value, list):
+                item[key] = json.dumps(value)
 
-        if sqlite_db.insert_items(item):
-             spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
-        else:
-            spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")
-
-        return item
-
-        # # Convert any list fields to JSON strings for database storage
-        # for key, value in item.items():
-        #     if isinstance(value, list):
-        #         item[key] = json.dumps(value)
-
-        # # Add the update timestamp
-        # item["last_updated"] = datetime.now(timezone.utc).isoformat()
+        # Add the update timestamp
+        item["last_updated"] = datetime.now(timezone.utc).isoformat()
 
         # # Prepare columns and placeholders for a robust upsert operation
         # columns = ", ".join(item.keys())
@@ -175,3 +132,10 @@ class SQLitePipeline:
         #     spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
         # except Exception as e:
         #     spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")
+
+        if sqlite_db.insert_item(item):
+             spider.logger.info(f"Successfully saved item {item.get('sku')} to SQLite.")
+        else:
+            spider.logger.error(f"Failed to save item {item.get('sku')} to SQLite: {e}")
+
+        return item
