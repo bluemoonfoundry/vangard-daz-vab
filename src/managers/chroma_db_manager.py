@@ -1,5 +1,6 @@
 import chromadb
 import json
+import re
 from collections import Counter
 from typing import List, Optional
 from embedding_utils import generate_embeddings
@@ -314,23 +315,41 @@ class ChromaDbManager:
                 json_string = meta.get(field_name)
                 if json_string:
                     try:
-                        item_list = json.loads(json_string)
-                        if isinstance(item_list, list):
-                            counter.update(item_list)
-                    except (json.JSONDecodeError, TypeError):
+                        item_list = []
+                        if isinstance(json_string, str):
+                            item_list = json_string.split(",")
+                        elif isinstance(json_string, list):
+                            item_list = json.loads(json_string)
+
+                        item_list=[x.strip() for x in item_list if x]
+                        #print (f"CHECK {item_list}")
+                        counter.update(item_list)
+                    except (json.JSONDecodeError, TypeError):   
+                        print (f"MALFORMED data {type(json_string)} {json_string}")
                         pass  # Ignore malformed data
 
             parse_and_update_counter("tags", tag_counter)
             parse_and_update_counter("artist", artist_counter)
-            parse_and_update_counter("compatible_figures", figure_counter)
+            parse_and_update_counter("compatibility", figure_counter)
 
-        return {
+
+        # We need to reduce the tag list because it may be very long when it contains small counts
+        threshold = 10
+        filtered_dict = {
+            item: count 
+            for item, count in tag_counter.items() 
+            if count >= threshold
+        }
+        
+        tag_counter = Counter(filtered_dict)
+
+        return { 
             "total_docs": total_docs,
             "last_update": last_update,
             "histograms": {
                 "tags": tag_counter,
                 "artists": artist_counter,
-                "compatible_figures": figure_counter,
+                "compatibility": figure_counter,
                 "categories": category_counter,
             },
         }

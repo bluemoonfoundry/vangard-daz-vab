@@ -1,24 +1,44 @@
 import sqlite3
 import os
 import argparse
+import json
 from datetime import datetime
 from utilities import fetch_json_from_url, fetch_html_content
-from managers.managers import chroma_db_manager
+from managers.managers import chroma_db_manager, sqlite_db
 from embedding_utils import generate_embeddings
 import re
 from collections import Counter
 import pprint
 
-# --- PREVIOUS IMPORTS AND DAZDBANALYZER CLASS ---
-# (The DazDBAnalyzer class remains exactly the same as before.
-#  It's responsible for the "Extract" step from PostgreSQL.)
 
+import sqlite3
+import os
+import argparse
+from datetime import datetime
+import re
+from collections import Counter
+
+# Third-party libraries
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
+import chromadb
+import numpy as np
+# from sentence_transformers import SentenceTransformer # Uncomment for real embeddings
 
+# --- CONSTANTS ---
+SQLITE_DB_PATH = 'enriched_products.db'
+SQLITE_TABLE_NAME = 'enriched_products'
+BATCH_SIZE = 512
+
+
+# ==============================================================================
+#  PHASE 1: EXTRACT DATA FROM POSTGRESQL
+# ==============================================================================
 class DazDBAnalyzer:
-    # ... (paste the full, unchanged DazDBAnalyzer class here) ...
+    """
+    Connects to the Daz Content PostgreSQL database to extract product data.
+    """
     QUERY_BODY = """
         SELECT
             p.id AS product_id,
@@ -58,65 +78,95 @@ class DazDBAnalyzer:
         LEFT JOIN dzcontent."tblType" AS ct ON c.content_type_id = ct."RecID"
     """
     QUERY_GROUPING = "GROUP BY p.id, p.name, p.artists, p.token, p.last_update, p.date_installed ORDER BY p.name"
-    def __init__(self, db_config): self.db_config = db_config
+
+    def __init__(self, db_config):
+        self.db_config = db_config
+
     def _execute_query(self, sql, params=None):
         results = []
         try:
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                     cur.execute(sql, params)
-                    results = cur.fetchall()
-        except psycopg2.Error as e: print(f"Database error: {e}"); return None
+                    if cur.description:
+                        results = cur.fetchall()
+        except psycopg2.Error as e:
+            print(f"PostgreSQL Database error: {e}")
+            return None
         return [dict(row) for row in results]
-    def get_all_products(self):
-        print("Fetching data for all products..."); sql = f"{self.QUERY_BODY} {self.QUERY_GROUPING}"; return self._execute_query(sql)
-    def get_product_by_sku(self, sku):
-        print(f"Fetching data for product with SKU: {sku}..."); where_clause = "WHERE p.token = %s"; sql = f"{self.QUERY_BODY} {where_clause} {self.QUERY_GROUPING}"; results = self._execute_query(sql, (sku,)); return results[0] if results else None
-    def get_new_or_updated_products(self, since_date):
-        print(f"Fetching products modified since {since_date.strftime('%Y-%m-%d %H:%M:%S')}..."); where_clause = "WHERE COALESCE(p.last_update, p.date_installed) > %s"; sql = f"{self.QUERY_BODY} {where_clause} {self.QUERY_GROUPING}"; return self._execute_query(sql, (since_date,))
 
+    def get_all_skus(self):
+        """
+            Efficiently fetches a list of all non-null AND non-empty SKUs from PostgreSQL.
+        """
+        print("Fetching all valid SKUs from PostgreSQL...")
+        # This query now filters out both NULL and empty strings
+        sql = "SELECT token FROM dzcontent.product WHERE token IS NOT NULL AND token != ''"
+        results = self._execute_query(sql)
+        return [row['token'] for row in results] if results else []
 
-# --- CONSTANTS FOR THE ETL PROCESS ---
-SQLITE_DB_PATH = 'enriched_products.db'
-SQLITE_TABLE_NAME = 'enriched_products'
+    def get_products_by_sku_list(self, skus):
+        """Fetches full product data for a given list of SKUs, handling batching."""
+        if not skus:
+            return []
+        print(f"Fetching full data for {len(skus)} products from PostgreSQL...")
+        all_products = []
+        for i in range(0, len(skus), BATCH_SIZE):
+            sku_batch = skus[i:i + BATCH_SIZE]
+            placeholders = ','.join(['%s'] * len(sku_batch))
+            where_clause = f"WHERE p.token IN ({placeholders})"
+            sql = f"{self.QUERY_BODY} {where_clause} {self.QUERY_GROUPING}"
+            batch_results = self._execute_query(sql, tuple(sku_batch))
+            if batch_results:
+                all_products.extend(batch_results)
+        return all_products
 
-# --- ETL HELPER FUNCTIONS ---
-
+# ==============================================================================
+#  PHASE 2: TRANSFORM AND LOAD DATA
+# ==============================================================================
 def setup_sqlite_db(db_path, table_name):
-    """Creates the SQLite database and table using your specific schema."""
+    """Creates the SQLite database and table using the final schema."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    # Using an f-string is safe here as the table name is from a constant, not user input.
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS {table_name} (
-            sku TEXT PRIMARY KEY,
-            url TEXT,
-            image_url TEXT,
-            store TEXT,
-            name TEXT,
-            artist TEXT,
-            price TEXT,
-            description TEXT,
-            tags TEXT,
-            formats TEXT,
-            poly_count TEXT,
-            textures_info TEXT,
-            required_products TEXT,
-            compatible_figures TEXT,
-            compatible_software TEXT,
-            embedding_text TEXT,
-            last_updated TEXT,
-            category TEXT,
-            subcategories TEXT,
-            styles TEXT,
-            inferred_tags TEXT,
-            enriched_at TEXT,
-            mature INTEGER
+            sku TEXT PRIMARY KEY, url TEXT, image_url TEXT, store TEXT, name TEXT, artist TEXT, price TEXT, description TEXT,
+            tags TEXT, formats TEXT, poly_count TEXT, textures_info TEXT, required_products TEXT, compatible_figures TEXT,
+            compatible_software TEXT, embedding_text TEXT, last_updated TEXT, category TEXT, subcategories TEXT, styles TEXT,
+            inferred_tags TEXT, enriched_at TEXT, mature INTEGER
         )
     ''')
     conn.commit()
     conn.close()
     print(f"SQLite database '{db_path}' and table '{table_name}' are ready.")
+
+def get_all_skus_from_sqlite(db_path, table_name):
+    """Efficiently fetches all existing SKUs from the SQLite database."""
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT sku FROM {table_name}")
+    results = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return results
+
+def determine_categories(content_type_string: str) -> dict:
+    """Analyzes a content type string to determine a primary category and subcategories."""
+    IGNORE_WORDS = {'follower', 'default', 'support', 'preset', 'people', 'genesis', 'genesis 9', 'genesis 8', 'genesis 3'}
+    PRIORITY_WORDS = {'character', 'clothes', 'accessories', 'environments', 'hair', 'poses', 'animations', 'props', 'tools', 'effects'}
+    if not content_type_string: return {'category': None, 'subcategories': []}
+    words = re.split(r'[^a-zA-Z0-9]+', content_type_string)
+    valid_words = [w.lower().strip() for w in words if w.lower().strip() and w.lower().strip() not in IGNORE_WORDS]
+    if not valid_words: return {'category': None, 'subcategories': []}
+    primary_category = next((word for word in valid_words if word in PRIORITY_WORDS), None)
+    if primary_category is None:
+        word_counts = Counter(valid_words)
+        if word_counts: primary_category = word_counts.most_common(1)[0][0]
+    if primary_category is None: return {'category': None, 'subcategories': []}
+    unique_words = set(valid_words)
+    unique_words.discard(primary_category)
+    return {'category': primary_category, 'subcategories': sorted(list(unique_words))}
 
 def scrape_product_page(sku):
     """
@@ -158,21 +208,53 @@ def scrape_product_page(sku):
 
 def generate_embedding_text(product_data, web_data):
     """
-    --- PLACEHOLDER ---
-    This is where your LLM/AI logic will go.
-    It takes the combined data and generates the description for vectorization.
+    Generates a rich, descriptive paragraph for the embedding model.
+    Focuses on combining factual data with potential use-cases and avoids noisy data.
     """
-    #print("    -> (Placeholder) Generating embedding text...")
-    # Example: Combine fields to create a rich description
-    desc = (
-        f"Product: {product_data.get('product_name')}. "
-        f"By artist: {product_data.get('artists')}. "
-        f"Compatible with: {product_data.get('product_compatibility')}. "
-        f"Categories: {product_data.get('categories')}. "
-        f"Web description: {web_data.get('description')}"
-    )
-    return desc
+    print("    -> Generating high-quality embedding text...")
+    
+    # Extract clean data, providing sensible defaults
+    name = product_data.get('product_name', 'a 3D asset')
+    artist = product_data.get('artists')
+    categories = product_data.get('categories')
+    web_desc = web_data.get('description', '').strip()
 
+    # --- Build the descriptive text part by part ---
+    
+    # Start with a clear, factual statement.
+    parts = [f"A 3D asset package titled '{name}'."]
+    if artist:
+        parts.append(f"Created by the artist or studio: {artist}.")
+
+    # Use the categories to add rich, contextual information about the product's use-case.
+    if categories:
+        # Clean up the category string for better sentence flow
+        clean_categories = categories.replace(',', ', ')
+        parts.append(f"It is categorized under: {clean_categories}.")
+        
+        # Add inferred use-case sentences based on keywords in categories. This is very powerful.
+        cat_lower = categories.lower()
+        if 'props' in cat_lower or 'decor' in cat_lower:
+            parts.append("This is a set of props suitable for decorating digital scenes, environments, and dioramas.")
+        if 'furniture' in cat_lower:
+            parts.append("It includes furniture items for interior design and architectural visualization.")
+        if 'character' in cat_lower:
+            parts.append("This is a character asset for digital art and animation.")
+        if 'hair' in cat_lower:
+            parts.append("This is a hairstyle asset for 3D characters.")
+        if 'wardrobe' in cat_lower or 'clothes' in cat_lower:
+            parts.append("It contains clothing or wardrobe items for 3D figures.")
+            
+    # Add the high-quality human-written description from the web at the end.
+    if web_desc:
+        parts.append(f"Product Description: {web_desc}")
+
+    # Join all the parts into a single, cohesive paragraph.
+    return " ".join(parts)
+
+# ==============================================================================
+#  PHASE 3: GENERATE AND STORE EMBEDDINGS
+# ==============================================================================
 def generate_and_store_embeddings(processed_skus):
     """
     Fetches processed data from SQLite, generates embeddings, and stores them in ChromaDB
@@ -184,8 +266,6 @@ def generate_and_store_embeddings(processed_skus):
 
     print(f"\n--- Starting Embedding Generation for {len(processed_skus)} products ---")
 
-    # Define a safe batch size, well below the typical 999 limit
-    BATCH_SIZE = 900
     
     # Connect to ChromaDB once at the beginning
     # print("Connecting to ChromaDB...")
@@ -217,6 +297,12 @@ def generate_and_store_embeddings(processed_skus):
         conn.close()
         
         print(f"Fetched {len(rows_to_embed)} rows from SQLite for embedding.")
+
+        for x, row in enumerate(rows_to_embed):
+            id = row['sku']
+            if id == "":                
+                print (f'Row {x} = {row}')
+                raise ValueError("SKU cannot be empty string")
         
         if not rows_to_embed:
             continue # Should not happen, but good practice
@@ -240,12 +326,6 @@ def generate_and_store_embeddings(processed_skus):
         ]
 
         # 3. GENERATE EMBEDDINGS IN A BATCH
-        print("    -> (Placeholder) Generating embeddings for the current batch...")
-        import numpy as np
-        embeddings = np.random.rand(len(documents), 3).tolist() 
-        print(f"Generated {len(embeddings)} embedding vectors for this batch.")
-
-
         texts_to_embed = documents #[p["embedding_text"] for p in documents]
 
         print(f"Generating embeddings for {len(texts_to_embed)} documents...")
@@ -253,6 +333,18 @@ def generate_and_store_embeddings(processed_skus):
 
         # 4. STORE IN CHROMADB IN A BATCH
         print("Upserting batch into ChromaDB...")
+
+        # # Validate the ids?
+        # DEBUG_SKU='24106'
+        # print(f"  [DEBUG] Preparing to process SKU '{DEBUG_SKU}'. Data is:")
+        # try:
+        #     item_index = ids.index(DEBUG_SKU)
+        #     print(f"    - ID: {ids[item_index]}")
+        #     print(f"    - Document: {documents[item_index][:100]}...") # Print first 100 chars
+        #     print(f"    - Metadata: {metadatas[item_index]}")
+        # except (ValueError, IndexError) as e:
+        #     print(f"    - Error finding debug SKU in prepared lists: {e}")
+
         try:
             chroma_db_manager.collection.upsert(
                 ids=ids,
@@ -269,195 +361,235 @@ def generate_and_store_embeddings(processed_skus):
             return False
     
     print(f"\nSuccessfully finished processing all batches.")
-
-def determine_categories(content_type_string: str) -> dict:
-    """
-    Analyzes a content type string to determine a primary category and subcategories.
-    It first checks for priority words; if none are found, it falls back to
-    determining the category based on word frequency.
-
-    Args:
-        content_type_string: A string containing comma-separated paths,
-                             e.g., "Follower/Wardrobe/Pant, People/Genesis 9/Hair".
-
-    Returns:
-        A dictionary with 'category' and 'subcategories' keys.
-    """
-    # --- 1. Define Constant Sets ---
-    # Using sets for fast O(1) average time complexity lookups.
-    IGNORE_WORDS = {'follower', 'default', 'support', 'preset', 'people', 'genesis', 'genesis 9', 'genesis 8', 'genesis 3'}
-    
-    PRIORITY_WORDS = {
-        'character', 'clothes', 'accessories', 'environments', 'hair', 'poses', 
-        'animations', 'props', 'tools', 'effects'
-    }
-
-    if not content_type_string:
-        return {'category': None, 'subcategories': []}
-
-    # --- 2. Parse and Clean Words ---
-    words = re.split(r'[^a-zA-Z0-9]+', content_type_string)
-    valid_words = [
-        word.lower().strip()
-        for word in words
-        if word.lower().strip() and word.lower().strip() not in IGNORE_WORDS
-    ]
-
-    if not valid_words:
-        return {'category': None, 'subcategories': []}
-
-    # --- 3. Determine the Primary Category ---
-    primary_category = None
-
-    # Phase 1: Priority Scan
-    # Find the first valid word that is in our priority list.
-    for word in valid_words:
-        if word in PRIORITY_WORDS:
-            primary_category = word
-            break  # Found a priority word, lock it in and stop searching.
-
-    # Phase 2: Frequency Fallback
-    # If no priority word was found after checking all valid words...
-    if primary_category is None:
-        word_counts = Counter(valid_words)
-        # ...fall back to the most common word.
-        if word_counts:
-            primary_category = word_counts.most_common(1)[0][0]
-
-    # If for some reason we still don't have a category, exit gracefully.
-    if primary_category is None:
-        return {'category': None, 'subcategories': []}
-
-    # --- 4. Determine Subcategories ---
-    unique_words = set(valid_words)
-    # Use .discard() instead of .remove() as it doesn't raise an error if the item isn't found
-    unique_words.discard(primary_category)
-    subcategories = sorted(list(unique_words))
-
-    # --- 5. Return the Final Structure ---
-    return {
-        'category': primary_category,
-        'subcategories': subcategories
-    }
-
+# ==============================================================================
+#  MAIN ORCHESTRATOR
+# ==============================================================================
 def main():
-    """Main ETL (Extract, Transform, Load) loop with command-line arguments."""
+    """Main ETL and Embedding pipeline with command-line arguments."""
     
-    # --- Setup Command-Line Argument Parsing ---
-    parser = argparse.ArgumentParser(description="ETL process for Daz Content Database.")
-    parser.add_argument(
-        '--force',
-        action='store_true',  # This makes it a boolean flag
-        help="Force a complete rebuild of the SQLite database, ignoring dates."
-    )
-    parser.add_argument(
-        '--limit',
-        type=int,
-        help="Process only the first N products. Ideal for testing."
-    )
+    parser = argparse.ArgumentParser(description="ETL and Embedding process for Daz Content.")
+    parser.add_argument('--force', action='store_true', help="Force a complete rebuild of the SQLite database (implies --all).")
+    parser.add_argument('--all', action='store_true', help="Process all products from Postgres, not just new ones.")
+    parser.add_argument('--limit', type=int, help="Process only a limited number of products. Ideal for testing.")
+    parser.add_argument('--phase', type=str, choices=['etl', 'embed', 'all'], default='all', help="Run only a specific phase: 'etl', 'embed', or both if omitted.")
     args = parser.parse_args()
 
-    # --- Handle --force flag logic: Delete existing DB if it exists ---
-    if args.force:
-        print("--force flag detected. The existing SQLite database will be rebuilt.")
-        if os.path.exists(SQLITE_DB_PATH):
-            os.remove(SQLITE_DB_PATH)
-            print(f"Deleted existing database at '{SQLITE_DB_PATH}'.")
+    if args.force and os.path.exists(SQLITE_DB_PATH):
+        print("--force flag detected. Deleting existing SQLite database.")
+        os.remove(SQLITE_DB_PATH)
 
-    # 1. Setup the local destination database
     setup_sqlite_db(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
-
-    # 2. Extract: Get all products from Postgres
     load_dotenv()
     try:
-        db_config = { "dbname": os.environ['DB_NAME'], "user": os.environ['DB_USER'], "password": os.environ['DB_PASS'], "host": os.environ['DB_HOST'], "port": os.environ['DB_PORT'] }
-    except KeyError as e: print(f"Error: Missing environment variable {e}. Please check your .env file."); return
+        db_config = {"dbname": os.environ['DB_NAME'], "user": os.environ['DB_USER'], "password": os.environ['DB_PASS'], "host": os.environ['DB_HOST'], "port": os.environ['DB_PORT']}
+    except KeyError as e: print(f"Error: Missing environment variable {e}."); return
 
     analyzer = DazDBAnalyzer(db_config)
-    all_postgres_products = analyzer.get_all_products()
-    if all_postgres_products is None: print("Failed to retrieve products from PostgreSQL. Aborting."); return
+    postgres_skus = analyzer.get_all_skus()
+    
+    skus_to_process = []
+    if args.all or args.force:
+        print("--all or --force flag detected. Targeting all products from PostgreSQL.")
+        skus_to_process = postgres_skus
+    else:
+        print("Default mode: Targeting only new SKUs not found in SQLite.")
+        sqlite_skus = get_all_skus_from_sqlite(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
 
-    # --- Handle --limit flag logic: Slice the list of products to process ---
-    products_to_process = all_postgres_products
+        #print (f'107451 -- In DAZ = {postgres_skus.index("107451")} -- In SQLITE = {sqlite_skus.index("107451")}')
+
+        new_skus = list(set(postgres_skus) - set(sqlite_skus))
+        skus_to_process = new_skus
+        print(f"Found {len(new_skus)} new SKUs to process.")
+
     if args.limit:
-        print(f"--limit flag detected. Processing the first {args.limit} products only.")
-        products_to_process = all_postgres_products[:args.limit]
+        print(f"--limit flag detected. Limiting processing to {args.limit} SKUs.")
+        skus_to_process = skus_to_process[:args.limit]
 
-    # 3. Connect to SQLite for the processing loop
-    conn = sqlite3.connect(SQLITE_DB_PATH)
+    if not skus_to_process:
+        print("No products to process in this run. Exiting.")
+        return
+    
+    successfully_processed_skus = []
+
+    if args.phase == 'etl' or args.phase == 'all':
+        print(f"\n--- Phase 1: Starting ETL for {len(skus_to_process)} products ---")
+        products_to_process_data = analyzer.get_products_by_sku_list(skus_to_process)
+        
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        cursor = conn.cursor()
+
+        try:
+            with open('.figures.json', 'r') as f:
+                figure_names = json.load(f)
+            print(f"Successfully loaded {len(figure_names)} figure names from .figures.json.")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading .figures.json: {e}")
+            print("Please ensure the file exists and is a valid JSON list of strings.")
+            return    
+        
+        for product in products_to_process_data:
+            sku = product.get('sku')
+            print(f"Processing '{product.get('product_name')}' (SKU: {sku})...")
+
+            #refactored_data = refactor_compatibility(product.get('product_compatibility'), figure_names)
+            refactored_data = determine_compatibility(product, figure_names)
+            
+            # Combine the original categories and the refactored tags
+            # filter(None, ...) cleverly removes any empty or None strings
+            final_tags = ', '.join(filter(None, [
+                product.get('categories'), 
+                refactored_data['tags_to_append']
+            ]))
+            
+            # --- (Transform and Load steps now use the refactored data) ---
+            web_data = scrape_product_page(sku) # Placeholder
+            embedding_text = generate_embedding_text(product, web_data) # Placeholder
+            pg_date_iso = product['last_modified_date'].isoformat() if product['last_modified_date'] else None
+            
+            web_data = scrape_product_page(sku)
+            embedding_text = generate_embedding_text(product, web_data)
+            structured_categories = determine_categories(product.get('content_types'))
+            subcategories_str = ','.join(structured_categories['subcategories'])
+            pg_date_iso = product['last_modified_date'].isoformat() if product['last_modified_date'] else None
+            
+            data_to_insert = (
+                sku, web_data.get('url'), web_data.get('image_url'), web_data.get('store'),
+                product.get('product_name'), product.get('artists'), web_data.get('price'), web_data.get('description'),
+                final_tags, product.get('content_types'), web_data.get('poly_count'),
+                web_data.get('textures_info'), web_data.get('required_products'), product.get('product_compatibility'),
+                web_data.get('compatible_software'), embedding_text, pg_date_iso, structured_categories['category'],
+                subcategories_str, None, None, datetime.utcnow().isoformat(), web_data.get('mature')
+            )
+
+            data_to_insert = (
+                sku,
+                web_data.get('url'),
+                web_data.get('image_url'),
+                web_data.get('store'),
+                product.get('product_name'),
+                product.get('artists'),
+                web_data.get('price'),
+                web_data.get('description'),
+                final_tags, # <-- USE THE NEW COMBINED TAGS
+                product.get('content_types'),
+                web_data.get('poly_count'),
+                web_data.get('textures_info'),
+                web_data.get('required_products'),
+                refactored_data['new_compatibility'], # <-- USE THE NEW CLEAN COMPATIBILITY
+                web_data.get('compatible_software'),
+                embedding_text,
+                pg_date_iso,
+                structured_categories['category'], # category (for LLM)
+                subcategories_str, # subcategories (for LLM)
+                None, # styles (for LLM)
+                None, # inferred_tags (for LLM)
+                datetime.utcnow().isoformat(),
+                web_data.get('mature')
+            )
+            cursor.execute(f'INSERT OR REPLACE INTO {SQLITE_TABLE_NAME} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', data_to_insert)
+            conn.commit()
+            successfully_processed_skus.append(sku)
+
+        conn.close()
+        print(f"\nETL Phase complete.")
+    
+    if args.phase == 'embed' or args.phase == 'all':
+        
+        if args.force or args.all:
+            print("Warning: --force and --all have no effect in --re-embed mode.")
+
+        # 1. Get all SKUs directly from our local SQLite database or use successfully_processed_skus if it exists
+
+        if len(successfully_processed_skus) > 0:
+            print(f"Using SKUs from ETL: {len(successfully_processed_skus)} SKUs.")
+            skus_to_embed = successfully_processed_skus
+        else:
+            print(f"Fetching all existing SKUs from SQLite database: '{SQLITE_DB_PATH}'")
+            skus_to_embed = get_all_skus_from_sqlite(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
+
+        # 2. Apply limit if provided
+        if args.limit:
+            print(f"--limit flag detected. Limiting re-embedding to {args.limit} SKUs.")
+            skus_to_embed = skus_to_embed[:args.limit]
+        
+        if not skus_to_embed:
+            print("SQLite database is empty or contains no SKUs. Nothing to re-embed.")
+            return
+
+        print(f"\n--- Phase 2: Starting Embedding Generation ---")
+        generate_and_store_embeddings(skus_to_embed)
+
+def get_all_skus_from_sqlite(db_path, table_name):
+    """Efficiently fetches all existing SKUs from the SQLite database."""
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    try:
+        cursor.execute(f"SELECT sku FROM {table_name}")
+        # fetchall returns a list of tuples, e.g., [('sku1',), ('sku2',)]
+        results = [row[0] for row in cursor.fetchall()]
+    except sqlite3.OperationalError as e:
+        print(f"Error querying SQLite: {e}. The table might not exist yet.")
+        results = []
+    finally:
+        conn.close()
+    return results
 
-    processed_skus_in_this_run = []   
-    for product in products_to_process:
-        sku = product.get('sku')
-        if not sku:
-            print(f"Skipping '{product.get('product_name')}' (ID: {product.get('product_id')}) - no SKU available.")
-            continue
+def determine_compatibility(product_data: dict, figure_names: list) -> dict:
+    """
+    Determines compatible figures by checking multiple fields in order of priority:
+    1. The formal 'product_compatibility' string.
+    2. The product 'name'.
+    3. The product 'description' from web scraping (if available).
+    
+    Args:
+        product_data: A dictionary containing the product's raw data.
+        figure_names: A list of canonical figure names to search for.
 
-        # --- Conditional Date Check (Bypassed by --force) ---
-        if not args.force:
-            cursor.execute(f"SELECT last_updated FROM {SQLITE_TABLE_NAME} WHERE sku = ?", (product['sku'],))
-            result = cursor.fetchone()
-            pg_date = product.get('last_modified_date')
-            if result and result[0] and pg_date and datetime.fromisoformat(result[0]) >= pg_date:
-                print(f"Skipping '{product.get('product_name')}' (SKU: {product.get('sku')}) - already up to date.")
-                continue
+    Returns:
+        A dictionary with the clean compatibility string and the original
+        compatibility string to be appended to tags.
+    """
+    compat_str = product_data.get('product_compatibility')
+    name = product_data.get('product_name')
+    description = product_data.get('description', '') # Description comes from web_data
 
-        print(f"Processing '{product.get('product_name')}' (SKU: {product.get('sku')})...")
-        
-        # ... (Transform and Load steps are identical to the previous script) ...
-        web_data = scrape_product_page(product['sku'])
-        embedding_text = generate_embedding_text(product, web_data)
-        pg_date_iso = product['last_modified_date'].isoformat() if product['last_modified_date'] else None
-        
-        categories = determine_categories(product.get('content_types'))
+    # Use a set to automatically handle duplicates
+    found_figures = set()
 
-        data_to_insert = (
-            product['sku'], 
-            web_data.get('url'), 
-            web_data.get('image_url'), 
-            web_data.get('store'),
-            product.get('product_name'), 
-            product.get('artists'), 
-            web_data.get('price'), 
-            web_data.get('description'),
-            web_data.get('tags'), 
-            product.get('content_types'), 
-            web_data.get('poly_count'),
-            web_data.get('textures_info'), 
-            web_data.get('required_products'), 
-            product.get('product_compatibility'),
-            web_data.get('compatible_software'), 
-            embedding_text, 
-            pg_date_iso, 
-            categories['category'], # category
-            ",".join(categories['subcategories']), # cubcategories
-            None, # styles
-            None, # inferred_tags
-            datetime.utcnow().isoformat(), # enriched_at
-            web_data.get('mature') # mature
-        )
+    # --- Heuristic 1: Check the formal compatibility string first ---
+    if compat_str:
+        compat_lower = compat_str.lower()
+        for figure in figure_names:
+            if figure.lower() in compat_lower:
+                found_figures.add(figure)
 
-        
-        
-        cursor.execute(f'''
-            INSERT OR REPLACE INTO {SQLITE_TABLE_NAME} (
-                sku, url, image_url, store, name, artist, price, description, tags, formats,
-                poly_count, textures_info, required_products, compatible_figures,
-                compatible_software, embedding_text, last_updated, category, subcategories,
-                styles, inferred_tags, enriched_at, mature
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', data_to_insert)
-        
-        conn.commit()
-        processed_skus_in_this_run.append(sku)
+    # --- Heuristic 2: If nothing found, check the product name ---
+    if not found_figures and name:
+        name_lower = name.lower()
+        for figure in figure_names:
+            # We check for the figure name as a whole word or part of a compound
+            # to avoid false positives (e.g., 'Dragon' matching 'Genesis 8 Dragon Form')
+            if figure.lower() in name_lower:
+                found_figures.add(figure)
+    
+    # --- Heuristic 3: If still nothing, check the product description ---
+    if not found_figures and description:
+        desc_lower = description.lower()
+        for figure in figure_names:
+            if figure.lower() in desc_lower:
+                found_figures.add(figure)
 
-    conn.close()
+    # --- Finalize and Return ---
+    new_compatibility = ', '.join(sorted(list(found_figures)))
+    
+    return {
+        'new_compatibility': new_compatibility,
+        'tags_to_append': compat_str or '' # Always use the original string for tags
+    }
 
-    generate_and_store_embeddings(processed_skus_in_this_run)
-
-    print("\nProcessing complete.")
-    print(f"Total products processed in this run: {len(products_to_process)}")
 
 if __name__ == "__main__":
     main()
+
