@@ -6,12 +6,9 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from api_tasks import run_update_flow
 from demo_data import get_demo_search_results as search_mock
 from demo_data import get_demo_stats as get_demo_stats_mock
 from open_daz_product import main as open_daz_product
-#from query_utils import get_db_stats, search
-
 from managers.managers import chroma_db_manager
 
 import logging
@@ -52,27 +49,27 @@ async def root():
     print("Hello from the simple FastAPI app!")
     return {"message": "Hello"}    
 
-@app.post("/api/v1/update", status_code=202)
-def start_update(background_tasks: BackgroundTasks):
-    if APP_MODE == "demo":
-        raise HTTPException(
-            status_code=403, detail="Update functionality is disabled in demo mode."
-        )
-    task_id = str(uuid.uuid4())
-    update_tasks[task_id] = {
-        "status": "pending",
-        "stage": "start",
-        "progress": "Task has been queued.",
-    }
-    background_tasks.add_task(run_update_flow, update_tasks[task_id])
-    return {"message": "Update process started.", "task_id": task_id}
+# @app.post("/api/v1/update", status_code=202)
+# def start_update(background_tasks: BackgroundTasks):
+#     if APP_MODE == "demo":
+#         raise HTTPException(
+#             status_code=403, detail="Update functionality is disabled in demo mode."
+#         )
+#     task_id = str(uuid.uuid4())
+#     update_tasks[task_id] = {
+#         "status": "pending",
+#         "stage": "start",
+#         "progress": "Task has been queued.",
+#     }
+#     background_tasks.add_task(run_update_flow, update_tasks[task_id])
+#     return {"message": "Update process started.", "task_id": task_id}
 
-@app.get("/api/v1/update/status/{task_id}")
-def get_update_status(task_id: str):
-    task = update_tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+# @app.get("/api/v1/update/status/{task_id}")
+# def get_update_status(task_id: str):
+#     task = update_tasks.get(task_id)
+#     if not task:
+#         raise HTTPException(status_code=404, detail="Task not found")
+#     return task
 
 @app.post("/api/v1/query")
 def run_query(request: QueryRequest):
@@ -118,7 +115,14 @@ def get_info():
             status_code=404, detail="Database collection not found or empty."
         )
 
+    from managers.managers import daz_pg_analyzer, sqlite_db
+    postgres_skus = daz_pg_analyzer.get_all_skus()
+    sqlite_skus = sqlite_db.get_all_skus_from_sqlite()
+    new_skus = list(set(postgres_skus) - set(sqlite_skus))
 
+    stats["total_products_postgres"] = len(postgres_skus)
+    stats["total_products_sqlite"] = len(sqlite_skus)
+    stats["new_products"] = len(new_skus)
 
     # Convert all Counter objects in the histograms to regular dictionaries
     if "histograms" in stats and stats["histograms"]:

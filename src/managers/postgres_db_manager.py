@@ -1,17 +1,15 @@
-import sqlite3
 import os
 import argparse
 import json
 from datetime import datetime
 from utilities import fetch_json_from_url, fetch_html_content
-from managers.managers import chroma_db_manager, sqlite_db
+from managers.managers import chroma_db_manager, sqlite_db, daz_pg_analyzer
 from embedding_utils import generate_embeddings
 import re
 from collections import Counter
 import pprint
 
 
-import sqlite3
 import os
 import argparse
 from datetime import datetime
@@ -19,137 +17,50 @@ import re
 from collections import Counter
 
 # Third-party libraries
-import psycopg2
-import psycopg2.extras
-from dotenv import load_dotenv
-import chromadb
-import numpy as np
+# import psycopg2
+# import psycopg2.extras
+# import chromadb
+# import numpy as np
 # from sentence_transformers import SentenceTransformer # Uncomment for real embeddings
 
-# --- CONSTANTS ---
-SQLITE_DB_PATH = 'enriched_products.db'
-SQLITE_TABLE_NAME = 'enriched_products'
-BATCH_SIZE = 512
+# # --- CONSTANTS ---
+# SQLITE_DB_PATH = 'enriched_products.db'
+# SQLITE_TABLE_NAME = 'enriched_products'
+# BATCH_SIZE = 512
 
+from dotenv import load_dotenv
+load_dotenv()
 
-# ==============================================================================
-#  PHASE 1: EXTRACT DATA FROM POSTGRESQL
-# ==============================================================================
-class DazDBAnalyzer:
-    """
-    Connects to the Daz Content PostgreSQL database to extract product data.
-    """
-    QUERY_BODY = """
-        SELECT
-            p.id AS product_id,
-            p.name AS product_name,
-            p.artists,
-            p.token AS sku,
-            COALESCE(p.last_update, p.date_installed) AS last_modified_date,
-            REGEXP_REPLACE(
-                STRING_AGG(DISTINCT final_compat.compatibility_name, ', '),
-                '^, *| *, $', ''
-            ) AS product_compatibility,
-            COUNT(DISTINCT c.id) AS content_item_count,
-            STRING_AGG(DISTINCT cat."fldCategoryName", ', ') AS categories,
-            STRING_AGG(DISTINCT ct."fldType", ', ') AS content_types
-        FROM dzcontent.product AS p
-        LEFT JOIN dzcontent.content AS c ON p.id = c.product_id
-        LEFT JOIN (
-            SELECT
-                c_inner.id AS content_id,
-                COALESCE(
-                    cb."fldCompatibilityBase",
-                    CASE
-                        WHEN c_inner.path ILIKE '%%/Genesis 9/%%' OR c_inner.filename ILIKE '%%Genesis 9%%' OR c_inner.filename ILIKE '%%G9%%' THEN 'Genesis 9'
-                        WHEN c_inner.path ILIKE '%%/Genesis 8.1/%%' OR c_inner.filename ILIKE '%%Genesis 8.1%%' OR c_inner.filename ILIKE '%%G8_1%%' THEN 'Genesis 8.1'
-                        WHEN c_inner.path ILIKE '%%/Genesis 8/%%' OR c_inner.filename ILIKE '%%Genesis 8%%' OR c_inner.filename ILIKE '%%G8%%' THEN 'Genesis 8'
-                        WHEN c_inner.path ILIKE '%%/Genesis 3/%%' OR c_inner.filename ILIKE '%%Genesis 3%%' OR c_inner.filename ILIKE '%%G3%%' THEN 'Genesis 3'
-                        WHEN c_inner.path ILIKE '%%/Genesis 2/%%' OR c_inner.filename ILIKE '%%Genesis 2%%' OR c_inner.filename ILIKE '%%G2%%' THEN 'Genesis 2'
-                        ELSE NULL
-                    END
-                ) AS compatibility_name
-            FROM dzcontent.content AS c_inner
-            LEFT JOIN dzcontent.compatibility_base_content AS cbc ON c_inner.id = cbc.content_id
-            LEFT JOIN dzcontent."tblCompatibilityBase" AS cb ON cbc.compatibility_base_id = cb."RecID"
-        ) AS final_compat ON c.id = final_compat.content_id
-        LEFT JOIN dzcontent.category_content AS cc ON c.id = cc.content_id
-        LEFT JOIN dzcontent."tblCategories" AS cat ON cc.category_id = cat."RecID"
-        LEFT JOIN dzcontent."tblType" AS ct ON c.content_type_id = ct."RecID"
-    """
-    QUERY_GROUPING = "GROUP BY p.id, p.name, p.artists, p.token, p.last_update, p.date_installed ORDER BY p.name"
-
-    def __init__(self, db_config):
-        self.db_config = db_config
-
-    def _execute_query(self, sql, params=None):
-        results = []
-        try:
-            with psycopg2.connect(**self.db_config) as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                    cur.execute(sql, params)
-                    if cur.description:
-                        results = cur.fetchall()
-        except psycopg2.Error as e:
-            print(f"PostgreSQL Database error: {e}")
-            return None
-        return [dict(row) for row in results]
-
-    def get_all_skus(self):
-        """
-            Efficiently fetches a list of all non-null AND non-empty SKUs from PostgreSQL.
-        """
-        print("Fetching all valid SKUs from PostgreSQL...")
-        # This query now filters out both NULL and empty strings
-        sql = "SELECT token FROM dzcontent.product WHERE token IS NOT NULL AND token != ''"
-        results = self._execute_query(sql)
-        return [row['token'] for row in results] if results else []
-
-    def get_products_by_sku_list(self, skus):
-        """Fetches full product data for a given list of SKUs, handling batching."""
-        if not skus:
-            return []
-        print(f"Fetching full data for {len(skus)} products from PostgreSQL...")
-        all_products = []
-        for i in range(0, len(skus), BATCH_SIZE):
-            sku_batch = skus[i:i + BATCH_SIZE]
-            placeholders = ','.join(['%s'] * len(sku_batch))
-            where_clause = f"WHERE p.token IN ({placeholders})"
-            sql = f"{self.QUERY_BODY} {where_clause} {self.QUERY_GROUPING}"
-            batch_results = self._execute_query(sql, tuple(sku_batch))
-            if batch_results:
-                all_products.extend(batch_results)
-        return all_products
 
 # ==============================================================================
 #  PHASE 2: TRANSFORM AND LOAD DATA
 # ==============================================================================
-def setup_sqlite_db(db_path, table_name):
-    """Creates the SQLite database and table using the final schema."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(f'''
-        CREATE TABLE IF NOT EXISTS {table_name} (
-            sku TEXT PRIMARY KEY, url TEXT, image_url TEXT, store TEXT, name TEXT, artist TEXT, price TEXT, description TEXT,
-            tags TEXT, formats TEXT, poly_count TEXT, textures_info TEXT, required_products TEXT, compatible_figures TEXT,
-            compatible_software TEXT, embedding_text TEXT, last_updated TEXT, category TEXT, subcategories TEXT, styles TEXT,
-            inferred_tags TEXT, enriched_at TEXT, mature INTEGER
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print(f"SQLite database '{db_path}' and table '{table_name}' are ready.")
+# def setup_sqlite_db(db_path, table_name):
+#     """Creates the SQLite database and table using the final schema."""
+#     conn = sqlite3.connect(db_path)
+#     cursor = conn.cursor()
+#     cursor.execute(f'''
+#         CREATE TABLE IF NOT EXISTS {table_name} (
+#             sku TEXT PRIMARY KEY, url TEXT, image_url TEXT, store TEXT, name TEXT, artist TEXT, price TEXT, description TEXT,
+#             tags TEXT, formats TEXT, poly_count TEXT, textures_info TEXT, required_products TEXT, compatible_figures TEXT,
+#             compatible_software TEXT, embedding_text TEXT, last_updated TEXT, category TEXT, subcategories TEXT, styles TEXT,
+#             inferred_tags TEXT, enriched_at TEXT, mature INTEGER
+#         )
+#     ''')
+#     conn.commit()
+#     conn.close()
+#     print(f"SQLite database '{db_path}' and table '{table_name}' are ready.")
 
-def get_all_skus_from_sqlite(db_path, table_name):
-    """Efficiently fetches all existing SKUs from the SQLite database."""
-    if not os.path.exists(db_path):
-        return []
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT sku FROM {table_name}")
-    results = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return results
+# def get_all_skus_from_sqlite(db_path, table_name):
+#     """Efficiently fetches all existing SKUs from the SQLite database."""
+#     if not os.path.exists(db_path):
+#         return []
+#     conn = sqlite3.connect(db_path)
+#     cursor = conn.cursor()
+#     cursor.execute(f"SELECT sku FROM {table_name}")
+#     results = [row[0] for row in cursor.fetchall()]
+#     conn.close()
+#     return results
 
 def determine_categories(content_type_string: str) -> dict:
     """Analyzes a content type string to determine a primary category and subcategories."""
@@ -266,7 +177,10 @@ def generate_and_store_embeddings(processed_skus):
 
     print(f"\n--- Starting Embedding Generation for {len(processed_skus)} products ---")
 
-    
+    BATCH_SIZE = int(os.getenv('BATCH_SIZE', '512'))
+    SQLITE_DB_PATH = os.getenv('SQLITE_DB_PATH', 'enriched_products.db')    
+    SQLITE_TABLE_NAME = os.getenv('SQLITE_TABLE_NAME', 'enriched_products')
+
     # Connect to ChromaDB once at the beginning
     # print("Connecting to ChromaDB...")
     # client = chromadb.Client() # For persistent storage, use: chromadb.PersistentClient(path="/path/to/db")
@@ -279,22 +193,7 @@ def generate_and_store_embeddings(processed_skus):
         
         print(f"\nProcessing batch {i//BATCH_SIZE + 1} of {len(processed_skus)//BATCH_SIZE + 1} (size: {len(sku_batch)})...")
 
-        # 1. CONNECT TO SQLITE AND FETCH DATA FOR THE CURRENT BATCH
-        conn = sqlite3.connect(SQLITE_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        placeholders = ','.join(['?'] * len(sku_batch))
-        
-        sqlite_query = f"""
-            SELECT sku, url, image_url, embedding_text, name, artist, compatible_figures, tags, category, subcategories
-            FROM {SQLITE_TABLE_NAME}
-            WHERE sku IN ({placeholders})
-        """
-        
-        cursor.execute(sqlite_query, sku_batch)
-        rows_to_embed = cursor.fetchall()
-        conn.close()
+        rows_to_embed = sqlite_db.get_content_by_sku_batch(sku_batch)
         
         print(f"Fetched {len(rows_to_embed)} rows from SQLite for embedding.")
 
@@ -334,17 +233,6 @@ def generate_and_store_embeddings(processed_skus):
         # 4. STORE IN CHROMADB IN A BATCH
         print("Upserting batch into ChromaDB...")
 
-        # # Validate the ids?
-        # DEBUG_SKU='24106'
-        # print(f"  [DEBUG] Preparing to process SKU '{DEBUG_SKU}'. Data is:")
-        # try:
-        #     item_index = ids.index(DEBUG_SKU)
-        #     print(f"    - ID: {ids[item_index]}")
-        #     print(f"    - Document: {documents[item_index][:100]}...") # Print first 100 chars
-        #     print(f"    - Metadata: {metadatas[item_index]}")
-        # except (ValueError, IndexError) as e:
-        #     print(f"    - Error finding debug SKU in prepared lists: {e}")
-
         try:
             chroma_db_manager.collection.upsert(
                 ids=ids,
@@ -361,31 +249,71 @@ def generate_and_store_embeddings(processed_skus):
             return False
     
     print(f"\nSuccessfully finished processing all batches.")
+
+
+
+def determine_compatibility(product_data: dict, figure_names: list) -> dict:
+    """
+    Determines compatible figures by checking multiple fields in order of priority:
+    1. The formal 'product_compatibility' string.
+    2. The product 'name'.
+    3. The product 'description' from web scraping (if available).
+    
+    Args:
+        product_data: A dictionary containing the product's raw data.
+        figure_names: A list of canonical figure names to search for.
+
+    Returns:
+        A dictionary with the clean compatibility string and the original
+        compatibility string to be appended to tags.
+    """
+    compat_str = product_data.get('product_compatibility')
+    name = product_data.get('product_name')
+    description = product_data.get('description', '') # Description comes from web_data
+
+    # Use a set to automatically handle duplicates
+    found_figures = set()
+
+    # --- Heuristic 1: Check the formal compatibility string first ---
+    if compat_str:
+        compat_lower = compat_str.lower()
+        for figure in figure_names:
+            if figure.lower() in compat_lower:
+                found_figures.add(figure)
+
+    # --- Heuristic 2: If nothing found, check the product name ---
+    if not found_figures and name:
+        name_lower = name.lower()
+        for figure in figure_names:
+            # We check for the figure name as a whole word or part of a compound
+            # to avoid false positives (e.g., 'Dragon' matching 'Genesis 8 Dragon Form')
+            if figure.lower() in name_lower:
+                found_figures.add(figure)
+    
+    # --- Heuristic 3: If still nothing, check the product description ---
+    if not found_figures and description:
+        desc_lower = description.lower()
+        for figure in figure_names:
+            if figure.lower() in desc_lower:
+                found_figures.add(figure)
+
+    # --- Finalize and Return ---
+    new_compatibility = ', '.join(sorted(list(found_figures)))
+    
+    return {
+        'new_compatibility': new_compatibility,
+        'tags_to_append': compat_str or '' # Always use the original string for tags
+    }
+
 # ==============================================================================
 #  MAIN ORCHESTRATOR
 # ==============================================================================
-def main():
+def main(args):
     """Main ETL and Embedding pipeline with command-line arguments."""
     
-    parser = argparse.ArgumentParser(description="ETL and Embedding process for Daz Content.")
-    parser.add_argument('--force', action='store_true', help="Force a complete rebuild of the SQLite database (implies --all).")
-    parser.add_argument('--all', action='store_true', help="Process all products from Postgres, not just new ones.")
-    parser.add_argument('--limit', type=int, help="Process only a limited number of products. Ideal for testing.")
-    parser.add_argument('--phase', type=str, choices=['etl', 'embed', 'all'], default='all', help="Run only a specific phase: 'etl', 'embed', or both if omitted.")
-    args = parser.parse_args()
+    sqlite_db.setup_sqlite_db(args.force)
 
-    if args.force and os.path.exists(SQLITE_DB_PATH):
-        print("--force flag detected. Deleting existing SQLite database.")
-        os.remove(SQLITE_DB_PATH)
-
-    setup_sqlite_db(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
-    load_dotenv()
-    try:
-        db_config = {"dbname": os.environ['DB_NAME'], "user": os.environ['DB_USER'], "password": os.environ['DB_PASS'], "host": os.environ['DB_HOST'], "port": os.environ['DB_PORT']}
-    except KeyError as e: print(f"Error: Missing environment variable {e}."); return
-
-    analyzer = DazDBAnalyzer(db_config)
-    postgres_skus = analyzer.get_all_skus()
+    postgres_skus = daz_pg_analyzer.get_all_skus()
     
     skus_to_process = []
     if args.all or args.force:
@@ -393,9 +321,7 @@ def main():
         skus_to_process = postgres_skus
     else:
         print("Default mode: Targeting only new SKUs not found in SQLite.")
-        sqlite_skus = get_all_skus_from_sqlite(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
-
-        #print (f'107451 -- In DAZ = {postgres_skus.index("107451")} -- In SQLITE = {sqlite_skus.index("107451")}')
+        sqlite_skus = sqlite_db.get_all_skus_from_sqlite()
 
         new_skus = list(set(postgres_skus) - set(sqlite_skus))
         skus_to_process = new_skus
@@ -413,9 +339,9 @@ def main():
 
     if args.phase == 'etl' or args.phase == 'all':
         print(f"\n--- Phase 1: Starting ETL for {len(skus_to_process)} products ---")
-        products_to_process_data = analyzer.get_products_by_sku_list(skus_to_process)
+        products_to_process_data = daz_pg_analyzer.get_products_by_sku_list(skus_to_process)
         
-        conn = sqlite3.connect(SQLITE_DB_PATH)
+        conn = sqlite_db.get_connection() 
         cursor = conn.cursor()
 
         try:
@@ -486,7 +412,7 @@ def main():
                 datetime.utcnow().isoformat(),
                 web_data.get('mature')
             )
-            cursor.execute(f'INSERT OR REPLACE INTO {SQLITE_TABLE_NAME} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', data_to_insert)
+            cursor.execute(f'INSERT OR REPLACE INTO {sqlite_db.sqlite_db_table} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', data_to_insert)
             conn.commit()
             successfully_processed_skus.append(sku)
 
@@ -504,8 +430,8 @@ def main():
             print(f"Using SKUs from ETL: {len(successfully_processed_skus)} SKUs.")
             skus_to_embed = successfully_processed_skus
         else:
-            print(f"Fetching all existing SKUs from SQLite database: '{SQLITE_DB_PATH}'")
-            skus_to_embed = get_all_skus_from_sqlite(SQLITE_DB_PATH, SQLITE_TABLE_NAME)
+            print(f"Fetching all existing SKUs from SQLite database: '{sqlite_db.sqlite_db_path}'...")
+            skus_to_embed = sqlite_db.get_all_skus_from_sqlite()
 
         # 2. Apply limit if provided
         if args.limit:
@@ -519,77 +445,13 @@ def main():
         print(f"\n--- Phase 2: Starting Embedding Generation ---")
         generate_and_store_embeddings(skus_to_embed)
 
-def get_all_skus_from_sqlite(db_path, table_name):
-    """Efficiently fetches all existing SKUs from the SQLite database."""
-    if not os.path.exists(db_path):
-        return []
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(f"SELECT sku FROM {table_name}")
-        # fetchall returns a list of tuples, e.g., [('sku1',), ('sku2',)]
-        results = [row[0] for row in cursor.fetchall()]
-    except sqlite3.OperationalError as e:
-        print(f"Error querying SQLite: {e}. The table might not exist yet.")
-        results = []
-    finally:
-        conn.close()
-    return results
-
-def determine_compatibility(product_data: dict, figure_names: list) -> dict:
-    """
-    Determines compatible figures by checking multiple fields in order of priority:
-    1. The formal 'product_compatibility' string.
-    2. The product 'name'.
-    3. The product 'description' from web scraping (if available).
-    
-    Args:
-        product_data: A dictionary containing the product's raw data.
-        figure_names: A list of canonical figure names to search for.
-
-    Returns:
-        A dictionary with the clean compatibility string and the original
-        compatibility string to be appended to tags.
-    """
-    compat_str = product_data.get('product_compatibility')
-    name = product_data.get('product_name')
-    description = product_data.get('description', '') # Description comes from web_data
-
-    # Use a set to automatically handle duplicates
-    found_figures = set()
-
-    # --- Heuristic 1: Check the formal compatibility string first ---
-    if compat_str:
-        compat_lower = compat_str.lower()
-        for figure in figure_names:
-            if figure.lower() in compat_lower:
-                found_figures.add(figure)
-
-    # --- Heuristic 2: If nothing found, check the product name ---
-    if not found_figures and name:
-        name_lower = name.lower()
-        for figure in figure_names:
-            # We check for the figure name as a whole word or part of a compound
-            # to avoid false positives (e.g., 'Dragon' matching 'Genesis 8 Dragon Form')
-            if figure.lower() in name_lower:
-                found_figures.add(figure)
-    
-    # --- Heuristic 3: If still nothing, check the product description ---
-    if not found_figures and description:
-        desc_lower = description.lower()
-        for figure in figure_names:
-            if figure.lower() in desc_lower:
-                found_figures.add(figure)
-
-    # --- Finalize and Return ---
-    new_compatibility = ', '.join(sorted(list(found_figures)))
-    
-    return {
-        'new_compatibility': new_compatibility,
-        'tags_to_append': compat_str or '' # Always use the original string for tags
-    }
-
-
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="ETL and Embedding process for Daz Content.")
+    parser.add_argument('--force', action='store_true', help="Force a complete rebuild of the SQLite database (implies --all).")
+    parser.add_argument('--all', action='store_true', help="Process all products from Postgres, not just new ones.")
+    parser.add_argument('--limit', type=int, help="Process only a limited number of products. Ideal for testing.")
+    parser.add_argument('--phase', type=str, choices=['etl', 'embed', 'all'], default='all', help="Run only a specific phase: 'etl', 'embed', or both if omitted.")
+    args = parser.parse_args()
+
+    main(args)
 

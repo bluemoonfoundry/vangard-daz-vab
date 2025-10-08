@@ -16,11 +16,11 @@ load_dotenv()
 
 script_directory = pathlib.Path(__file__).parent.resolve()
 CHECKPOINT_FILE = os.getenv("CHECKPOINT_FILE", ".checkpoint")
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
-DAZ_EXTRACTED_PRODUCT_TABLE = "product"
-CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-DAZ_EXTRACTED_PRODUCT_FILE = os.getenv("DAZ_PRODUCT_PATH", f"{script_directory}/products.json")
+#SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
+#DAZ_EXTRACTED_PRODUCT_TABLE = "product"
+#CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
+#COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
+#DAZ_EXTRACTED_PRODUCT_FILE = os.getenv("DAZ_PRODUCT_PATH", f"{script_directory}/products.json")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-embed-large-v1")
 
 def get_checkpoint() -> str:

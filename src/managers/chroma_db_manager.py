@@ -63,10 +63,9 @@ def build_where_clause(
 
 class ChromaDbManager:
 
-    def __init__(self, chroma_db_path, collection_name, sqlite_db):
+    def __init__(self, chroma_db_path, collection_name):
         self.chroma_db_path = chroma_db_path
         self.collection_name = collection_name
-        self.sqlite_db = sqlite_db
         self.client = chromadb.PersistentClient(path=chroma_db_path)
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
@@ -193,48 +192,7 @@ class ChromaDbManager:
         and completely rebuilds the ChromaDB collection. Otherwise, only update the Chroma
         database with products that are newer than the checkpoint_date
         """
-        
-
-        # # --- 1. Rebuild the ChromaDB if rebuild is True
-        # if rebuild:
-        #     print(f"Resetting and preparing ChromaDB collection: '{self.collection_name}'")
-        #     # Delete the old collection to ensure a clean rebuild
-        #     try:
-        #         self.delete_collection()
-        #     except Exception as e:
-        #         print(
-        #             f"WARNING: Collection {self.collection_name} not found, creating new one: {str(e)}"
-        #         )
-
-        # collection = self.client.get_or_create_collection(
-        #     name=self.collection_name,
-        #     metadata={"hnsw:space": "cosine"},  # Example for 768-dim embeddings
-        # )
-
-        # # --- 2. Read all products or products extracted more recently then checkpoint_date
-
-        # if checkpoint_date is None:
-        #     products_to_load = self.sqlite_db.execute_fetchall_query ("SELECT * FROM product")
-        # else:
-        #     q = f"""
-        #     SELECT * 
-        #     FROM product 
-        #     WHERE (Datetime(last_updated) > Datetime("{checkpoint_date}"))
-        #             OR (Datetime(enriched_at) > Datetime("{checkpoint_date}"))
-        #             AND embedding_text IS NOT NULL
-        #     """
-        #     print (f"## MARK {q}")
-        #     products_to_load = self.sqlite_db.execute_fetchall_query (
-        #         q    
-        #     )
-
-        # # --- 3. Prepare Data for Batch Processing ---
-        # valid_products = [dict(row) for row in products_to_load if row["embedding_text"]]
-
-        # if not valid_products:
-        #     print("No products with embedding_text found. Aborting.")
-        #     return False
-        
+                
         texts_to_embed = [p["embedding_text"] for p in valid_products]
         ids_to_upsert = [str(p["sku"]) for p in valid_products]
         metadatas_to_upsert: list[dict[str, str | int | float | bool | None]] = [
@@ -342,14 +300,14 @@ class ChromaDbManager:
         }
         
         tag_counter = Counter(filtered_dict)
-
+        
         return { 
             "total_docs": total_docs,
             "last_update": last_update,
             "histograms": {
                 "tags": tag_counter,
                 "artists": artist_counter,
-                "compatibility": figure_counter,
+                "compatible_figures": figure_counter,
                 "categories": category_counter,
             },
         }

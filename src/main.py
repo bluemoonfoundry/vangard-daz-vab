@@ -2,92 +2,16 @@ import argparse
 import json
 import os
 
-from utilities import get_checkpoint, set_checkpoint, compare_datetime_strings, DAZ_EXTRACTED_PRODUCT_FILE
 
 from output_formatters import print_pretty, print_json, print_table
 import uvicorn
 
-from scraper_process import run_scraper
-
-from managers.managers import daz_db_manager, chroma_db_manager, sqlite_db
-
-
-def fetch_command(args):
-#     #daz_db_manager.pre_fetch_faz_data()
-#     extract_daz_content()
-    pass    
-
-def scrape_command(args):
-    print("Starting scrape command...")
-    # dbfile = DAZ_EXTRACTED_PRODUCT_FILE
-
-    # try:
-    #     with open(dbfile, "r") as f:
-    #         products = json.load(f)
-    #         print(f"Loaded {len(products)} products from {dbfile}.")
-    # except FileNotFoundError:
-    #     print("Error: products.json not found. Run the 'fetch' command first.")
-    #     return
-
-    daz_db_manager.extract_daz_content(args.all)
-   
-    # # We only scrape products more recent than the most current checkpoint. If we want 
-    # # to scrape all products we have to explicitly say so in the product args or 
-    # # remove the checkpoint file 
-    # products_to_scrape = []
-    
-    # if not args.all:
-    #     checkpoint = get_checkpoint()
-    #     print(f"Update mode enabled. Scraping products installed after {checkpoint}.")
-    # else:
-    #     checkpoint = "1970-01-01T00:00:00Z"
-
-    # products_to_scrape = sqlite_db.get_post_checkpoint_rows(columns = "url, image_url, sku, mature", checkpoint=checkpoint)
-
-    # if args.limit and args.limit > 0:
-    #     print(
-    #         f"Applying limit: processing only the first {args.limit} of {len(products_to_scrape)} products."
-    #     )
-    #     products_to_scrape = products_to_scrape[: args.limit]
-
-    # print (f'#### Product scrape count = {len(products_to_scrape)}')
-
-    # if len(products_to_scrape) > 0:
-    #     run_scraper(products_to_scrape)
-    # else:
-    #     print("No new products to scrape based on the determined criteria.")
-
-
-def enrich_command(args):
-    #print("Starting LLM data enrichment process...")
-    #run_enrichment(args)
-    print ("Enrichment is not currently supported!")
-
-
-def rebuild_command(args):
-    """
-    Performs a full, destructive rebuild of the ChromaDB collection
-    from the SQLite database.
-    """
-
-    # Add a confirmation prompt to prevent accidental data loss
-    confirm = input(
-        "WARNING: This will delete and rebuild the entire ChromaDB collection. "
-        "This can take a long time. Are you sure you want to continue? (yes/no): "
-    )
-    if confirm.lower() == "yes":
-        print("Starting full ChromaDB rebuild...")
-        chroma_db_manager.load_sqlite_to_chroma(checkpoint_date=None, rebuild=True)
-    else:
-        print("Rebuild cancelled.")
-    set_checkpoint()
+from managers.managers import chroma_db_manager
 
 def load_command(args):
     print("Starting load command...")
-    checkpoint_date = get_checkpoint()
-    if chroma_db_manager.load_sqlite_to_chroma(checkpoint_date, rebuild=False):
-        set_checkpoint()
-
+    from managers.postgres_db_manager import main as load_dazdb_content
+    load_dazdb_content(args)
 
 def query_command(args):
     """Submits a query to the ChromaDB and prints the formatted results."""
@@ -163,7 +87,6 @@ def server_command(args):
 def openproduct_command(args):
     print("Starting openproduct command...")
     from open_daz_product import main as open_daz_product
-
     open_daz_product(args)
 
 
@@ -172,31 +95,10 @@ def main():
         description="Visual Asset Browser Data Pipeline CLI"
     )
 
-    parser.add_argument(
-        "--update",
-        action="store_true",
-        help="Only apply command to products that are not processed previously",
-    )
-
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Define commands
     parsers = {
-        "fetch": subparsers.add_parser(
-            "fetch", help="Loads external content from product pages for products in products.json"
-        ),
-        "scrape": subparsers.add_parser(
-            "scrape", help="Scrape products and save to SQLite."
-        ),
-        "enrich": subparsers.add_parser(
-            "enrich", help="Use an LLM to enrich product data."
-        ),
-        "rebuild": subparsers.add_parser(
-            "rebuild", help="Nuke and rebuild the entire ChromaDB from SQLite."
-        ),
-        "load": subparsers.add_parser(
-            "load", help="Load new data from SQLite into ChromaDB."
-        ),
         "query": subparsers.add_parser(
             "query", help="Query the ChromaDB vector store."
         ),
@@ -204,24 +106,13 @@ def main():
             "stats", help="Display stats about the ChromaDB collection."
         ),
         "server": subparsers.add_parser("server", help="Run the FastAPI web server."),
+        "load": subparsers.add_parser("load", help="Load data from DAZ Postgres to SQLite and ChromaDB."),
         "openproduct": subparsers.add_parser(
             "openproduct",
-            help="Open a naed DAZ product in DAZ Studio's Content Library Pane",
+            help="Open a named DAZ product in DAZ Studio's Content Library Pane",
         ),
+        
     }
-
-    parsers["scrape"].add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit the number of URLs to process from the list.",
-    )
-    parsers["scrape"].add_argument(
-        "--all",
-        action="store_true",
-        default=False,
-        help="Scrape all products, ignoring the checkpoint file",
-    )
 
     parsers["query"].add_argument("prompt", help="The search prompt.")
     parsers["query"].add_argument(
@@ -254,7 +145,12 @@ def main():
     parsers["server"].add_argument(
         "--demo", action="store_true", help="Run server in demo mode."
     )
-    
+
+    parsers["load"].add_argument('--force', action='store_true', help="Force a complete rebuild of the SQLite database (implies --all).")
+    parsers["load"].add_argument('--all', action='store_true', help="Process all products from Postgres, not just new ones.")
+    parsers["load"].add_argument('--limit', type=int, help="Process only a limited number of products. Ideal for testing.")
+    parsers["load"].add_argument('--phase', type=str, choices=['test', 'etl', 'embed', 'all'], default='all', help="Run only a specific phase: 'etl', 'embed', or both if omitted.")
+
 
     parsers["openproduct"].add_argument(
         "--product", help="The name of the product to open in DAZ Studio."
@@ -262,14 +158,15 @@ def main():
 
     # Set default functions
     func_map = {
-        "fetch": fetch_command,
-        "scrape": scrape_command,
-        "enrich": enrich_command,
-        "rebuild": rebuild_command,
-        "load": load_command,
+        # "fetch": fetch_command,
+        # "scrape": scrape_command,
+        # "enrich": enrich_command,
+        # "rebuild": rebuild_command,
+        # "load": load_command,
         "query": query_command,
         "stats": stats_command,
         "server": server_command,
+        "load": load_command,
         "openproduct": openproduct_command,
     }
     for cmd, sub_parser in parsers.items():

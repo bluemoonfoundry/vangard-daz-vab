@@ -1,29 +1,58 @@
 # src/inspect_chroma.py
 
 import os
-
+import sys
 import chromadb
 from dotenv import load_dotenv
 
-
-def inspect_collection_metadata(limit: int = 5):
-    """
-    Connects to ChromaDB, fetches a few items from the collection,
-    and prints the data types of their metadata fields.
-    """
+def get_collection():
     load_dotenv()
     CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
     COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-
-    print(f"--- Connecting to ChromaDB at: {CHROMA_DB_PATH} ---")
-    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-
+    
     try:
+        client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
         collection = client.get_collection(name=COLLECTION_NAME)
         print(f"--- Successfully connected to collection: '{COLLECTION_NAME}' ---")
     except ValueError:
         print(f"Error: Collection '{COLLECTION_NAME}' not found.")
         return
+
+    return collection
+
+def document_exists(doc_id):
+
+    collection = get_collection()
+
+    try:
+        # Query the collection by the document ID
+        results = collection.get(ids=[doc_id])
+        # If the document exists, the results will contain the document
+        return len(results["ids"]) > 0
+    except Exception as e:
+        print(f"Error checking document existence: {e}")
+        return False
+    
+def inspect_collection_metadata(limit: int = 5):
+    """
+    Connects to ChromaDB, fetches a few items from the collection,
+    and prints the data types of their metadata fields.
+    """
+    # load_dotenv()
+    # CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
+    # COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
+
+    # print(f"--- Connecting to ChromaDB at: {CHROMA_DB_PATH} ---")
+    # client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+
+    # try:
+    #     collection = client.get_collection(name=COLLECTION_NAME)
+    #     print(f"--- Successfully connected to collection: '{COLLECTION_NAME}' ---")
+    # except ValueError:
+    #     print(f"Error: Collection '{COLLECTION_NAME}' not found.")
+    #     return
+
+    collection = get_collection()
 
     total_docs = collection.count()
     if total_docs == 0:
@@ -65,4 +94,5 @@ def inspect_collection_metadata(limit: int = 5):
 
 
 if __name__ == "__main__":
-    inspect_collection_metadata()
+    #inspect_collection_metadata()
+    print (f"DOC CHECK on {sys.argv[1]} -> {document_exists(sys.argv[1])}")
