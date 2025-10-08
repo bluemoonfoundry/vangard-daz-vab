@@ -1,5 +1,6 @@
 import chromadb
 import json
+import os
 import re
 from collections import Counter
 from typing import List, Optional
@@ -223,7 +224,7 @@ class ChromaDbManager:
         # Note: ChromaDB batches automatically, but we do it here for clarity.
         # For very large datasets (>10k), you might want to loop in smaller batches.
         try:
-            collection.upsert(
+            self.collection.upsert(
                 ids=ids_to_upsert,
                 embeddings=embedding_list, 
                 documents=documents_to_upsert, 
@@ -292,7 +293,7 @@ class ChromaDbManager:
 
 
         # We need to reduce the tag list because it may be very long when it contains small counts
-        threshold = 10
+        threshold = int(os.getenv("STATS_TAG_THRESHOLD", "10"))
         filtered_dict = {
             item: count 
             for item, count in tag_counter.items() 

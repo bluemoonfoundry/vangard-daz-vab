@@ -158,11 +158,6 @@ def main():
 
     # Set default functions
     func_map = {
-        # "fetch": fetch_command,
-        # "scrape": scrape_command,
-        # "enrich": enrich_command,
-        # "rebuild": rebuild_command,
-        # "load": load_command,
         "query": query_command,
         "stats": stats_command,
         "server": server_command,
