@@ -4,9 +4,6 @@ import psycopg2.extras
 from dotenv import load_dotenv
 load_dotenv()
 
-# ==============================================================================
-#  PHASE 1: EXTRACT DATA FROM POSTGRESQL
-# ==============================================================================
 class DazDBAnalyzer:
     """
     Connects to the Daz Content PostgreSQL database to extract product data.

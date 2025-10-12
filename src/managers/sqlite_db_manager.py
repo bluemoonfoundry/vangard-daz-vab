@@ -14,7 +14,7 @@ class SQLiteWrapper:
         """Creates the SQLite database and table using the final schema."""
 
         if force_reset and os.path.exists(self.sqlite_db_path):
-            print("--force flag detected. Deleting existing SQLite database.")
+            print("--force flag detected. Deleting existing SQLite database. {force_reset} {os.path.exists(self.sqlite_db_path)}")
             os.remove(self.sqlite_db_path)
 
         conn = self.get_connection()
@@ -80,45 +80,6 @@ class SQLiteWrapper:
             conn.close()
         return results
 
-        # try:
-        #     self.connection = sqlite3.connect(sqlite_db_path)
-        #     self.connection.row_factory = sqlite3.Row
-        #     cursor = self.connection.cursor()
-        #     cursor.execute(
-        #         f"""
-        #         CREATE TABLE IF NOT EXISTS {self.sqlite_db_table} (
-        #             sku TEXT PRIMARY KEY,
-        #             url TEXT,
-        #             image_url TEXT
-        #             store TEXT,
-        #             name TEXT,
-        #             artist TEXT,
-        #             price TEXT,
-        #             description TEXT,
-        #             tags TEXT,
-        #             formats TEXT,
-        #             poly_count TEXT,
-        #             textures_info TEXT,
-        #             required_products TEXT,
-        #             compatible_figures TEXT,
-        #             compatible_software TEXT,
-        #             embedding_text TEXT,
-        #             last_updated TEXT,
-        #             -- Columns for LLM enrichment
-        #             category TEXT,
-        #             subcategories TEXT,
-        #             styles TEXT,
-        #             inferred_tags TEXT,
-        #             enriched_at TEXT,
-        #             mature INTEGER
-        #         )
-        #     """
-        #     )
-        #     self.connection.commit()
-        # except sqlite3.OperationalError as e:
-        #     self._logger.error(f"Error reading from SQLite: {e}")
-        #     raise e
-        
     def execute_fetchone_query(self, query:str):
         content=None
         try:
@@ -162,7 +123,8 @@ class SQLiteWrapper:
         select {columns}
         from {self.sqlite_db_table}
         where Datetime(last_updated) > Datetime("{checkpoint}")
-    """
+        """
+
         print (f"QUERY = [{q}]")
         rows = self.execute_fetchall_query (q)
         return  [dict(zip(row.keys(), row)) for row in rows]
@@ -176,7 +138,7 @@ class SQLiteWrapper:
         # Add the update timestamp
         item["last_updated"] = datetime.now(timezone.utc).isoformat()
 
-        # Prepare columns and placeholders for a robust upsert operation
+        # Prepare columns and placeholders for upsert
         columns = ", ".join(item.keys())
         placeholders = ", ".join(["?"] * len(item))
         table = self.sqlite_db_table

@@ -256,12 +256,11 @@ def determine_compatibility(product_data: dict, figure_names: list) -> dict:
         'tags_to_append': compat_str or '' # Always use the original string for tags
     }
 
-# ==============================================================================
-#  MAIN ORCHESTRATOR
-# ==============================================================================
 def main(args):
     """Main ETL and Embedding pipeline with command-line arguments."""
     
+    print (f"ARGF = {args}")
+
     sqlite_db.setup_sqlite_db(args.force)
 
     postgres_skus = daz_pg_analyzer.get_all_skus()
@@ -288,6 +287,8 @@ def main(args):
     
     successfully_processed_skus = []
 
+    print(f"Total SKUs to process: {len(skus_to_process)}: [{args.phase}]")
+
     if args.phase == 'etl' or args.phase == 'all':
         print(f"\n--- Phase 1: Starting ETL for {len(skus_to_process)} products ---")
         products_to_process_data = daz_pg_analyzer.get_products_by_sku_list(skus_to_process)
@@ -308,17 +309,14 @@ def main(args):
             sku = product.get('sku')
             print(f"Processing '{product.get('product_name')}' (SKU: {sku})...")
 
-            #refactored_data = refactor_compatibility(product.get('product_compatibility'), figure_names)
             refactored_data = determine_compatibility(product, figure_names)
             
             # Combine the original categories and the refactored tags
-            # filter(None, ...) cleverly removes any empty or None strings
             final_tags = ', '.join(filter(None, [
                 product.get('categories'), 
                 refactored_data['tags_to_append']
             ]))
             
-            # --- (Transform and Load steps now use the refactored data) ---
             web_data = scrape_product_page(sku) # Placeholder
             embedding_text = generate_embedding_text(product, web_data) # Placeholder
             pg_date_iso = product['last_modified_date'].isoformat() if product['last_modified_date'] else None

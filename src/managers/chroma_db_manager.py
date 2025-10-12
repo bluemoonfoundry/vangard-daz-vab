@@ -1,11 +1,8 @@
 import chromadb
 import json
 import os
-import re
 from collections import Counter
 from typing import List, Optional
-from embedding_utils import generate_embeddings
-
 from embedding_utils import generate_embeddings
 
 def build_where_clause(
@@ -48,10 +45,10 @@ def build_where_clause(
             and_conditions.append(conditions[0])
 
     # Build conditions for each filter type passed to the function
-    create_or_condition("tags", tags)
-    create_or_condition("artist", artists)
-    create_or_condition("category", categories)
-    create_or_condition("compatible_figures", compatible_figures)
+    create_or_condition("tags", tags) if tags else None
+    create_or_condition("artist", artists) if artists else None
+    create_or_condition("category", categories) if categories else None
+    create_or_condition("compatible_figures", compatible_figures) if compatible_figures else None
 
     # Return the final filter structure for the ChromaDB query
     if not and_conditions:
@@ -113,12 +110,6 @@ class ChromaDbManager:
         """
         Performs a hybrid search with multiple, faceted metadata filters.
         """
-        # client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        # try:
-        #     collection = client.get_collection(name=COLLECTION_NAME)
-        # except ValueError:
-        #     print(f"Warning: ChromaDB collection '{COLLECTION_NAME}' not found.")
-        #     return {"total_hits": 0, "limit": limit, "offset": offset, "results": []}
 
         # --- 1. Generate Query Embedding ---
         query_embedding = generate_embeddings(prompt, is_query=True)
@@ -145,7 +136,6 @@ class ChromaDbManager:
             include=["metadatas", "distances", "documents"],
         )
 
-        #print (f'DEBUG: Result set = {results}')
 
         # --- 4. Post-process Results (Filtering by Score) ---
         processed_results = []
@@ -313,7 +303,3 @@ class ChromaDbManager:
             },
         }
 
-if __name__ == "__main__":
-    from utilities import CHROMA_DB_PATH, COLLECTION_NAME
-    db = ChromaDbManager(CHROMA_DB_PATH, COLLECTION_NAME)
-    db.load_sqlite_to_chroma()

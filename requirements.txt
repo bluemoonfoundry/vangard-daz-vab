@@ -16,6 +16,9 @@ datasets
 einops
 sentence_transformers
 rich
+browse
+bs4
+readability-lxml
 
 # Add torch seperately based on availability of CUDA?
 
@@ -39,6 +42,4 @@ rich
 #
 # playwright install
 
-browse
-bs4
-readability-lxml
+
