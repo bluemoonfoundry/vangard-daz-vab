@@ -3,30 +3,15 @@
 import os
 import sys
 import chromadb
+
+from managers.managers import chroma_db_manager
+
 from dotenv import load_dotenv
 
-def get_collection():
-    load_dotenv()
-    CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-    COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-    
-    try:
-        client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        collection = client.get_collection(name=COLLECTION_NAME)
-        print(f"--- Successfully connected to collection: '{COLLECTION_NAME}' ---")
-    except ValueError:
-        print(f"Error: Collection '{COLLECTION_NAME}' not found.")
-        return
-
-    return collection
-
 def document_exists(doc_id):
-
-    collection = get_collection()
-
     try:
         # Query the collection by the document ID
-        results = collection.get(ids=[doc_id])
+        results = chroma_db_manager.collection.collection.get(ids=[doc_id])
         # If the document exists, the results will contain the document
         return len(results["ids"]) > 0
     except Exception as e:
@@ -38,23 +23,8 @@ def inspect_collection_metadata(limit: int = 5):
     Connects to ChromaDB, fetches a few items from the collection,
     and prints the data types of their metadata fields.
     """
-    # load_dotenv()
-    # CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-    # COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
 
-    # print(f"--- Connecting to ChromaDB at: {CHROMA_DB_PATH} ---")
-    # client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-
-    # try:
-    #     collection = client.get_collection(name=COLLECTION_NAME)
-    #     print(f"--- Successfully connected to collection: '{COLLECTION_NAME}' ---")
-    # except ValueError:
-    #     print(f"Error: Collection '{COLLECTION_NAME}' not found.")
-    #     return
-
-    collection = get_collection()
-
-    total_docs = collection.count()
+    total_docs = chroma_db_manager.collection.count()
     if total_docs == 0:
         print("Collection is empty. Nothing to inspect.")
         return
@@ -63,7 +33,7 @@ def inspect_collection_metadata(limit: int = 5):
 
     # --- Fetch a few items from the collection ---
     # We include the 'metadatas' to inspect them.
-    results = collection.get(limit=limit, include=["metadatas"])
+    results = chroma_db_manager.collection.get(limit=limit, include=["metadatas"])
 
     if not results or not results["ids"]:
         print("Could not retrieve any items from the collection.")

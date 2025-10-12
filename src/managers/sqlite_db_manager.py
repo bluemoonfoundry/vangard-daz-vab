@@ -17,7 +17,7 @@ class SQLiteWrapper:
             print("--force flag detected. Deleting existing SQLite database.")
             os.remove(self.sqlite_db_path)
 
-        conn = sqlite3.connect(self.sqlite_db_path)
+        conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.sqlite_db_table} (

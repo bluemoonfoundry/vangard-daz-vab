@@ -2,78 +2,22 @@ import os
 import pathlib
 import subprocess
 import sys
-import datetime
-from datetime import timedelta, timezone
-from datetime import datetime
 import requests
-import operator
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 
 from dotenv import load_dotenv
 load_dotenv()
 
-script_directory = pathlib.Path(__file__).parent.resolve()
-CHECKPOINT_FILE = os.getenv("CHECKPOINT_FILE", ".checkpoint")
-#SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "products.db")
-#DAZ_EXTRACTED_PRODUCT_TABLE = "product"
-#CHROMA_DB_PATH = os.getenv("CHROMA_PATH", "db")
-#COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "daz_products")
-#DAZ_EXTRACTED_PRODUCT_FILE = os.getenv("DAZ_PRODUCT_PATH", f"{script_directory}/products.json")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-embed-large-v1")
+def open_daz_product(args):
+    product_name = args.product if args and args.product else None
 
-def get_checkpoint() -> str:
-    if os.path.exists(CHECKPOINT_FILE):
-        with open(CHECKPOINT_FILE, "r") as f:
-            return f.read().strip()
-    return "1970-01-01T00:00:00Z"
-
-def set_checkpoint():
-    with open(CHECKPOINT_FILE, "w") as f:
-        f.write(datetime.now(timezone.utc).isoformat())
-    print("Checkpoint updated.")
-
-def compare_datetime_strings(d1:str, d2:str, op:str) -> bool:
-    """
-    Compares two datetime strings using a given comparison operator.
-
-    Args:
-        d1 (str): The first datetime string.
-        d2 (str): The second datetime string.
-        op (str): The comparison operator as a string: '>', '<', '==', '>=', '<=', '!='.
-
-    Returns:
-        bool: The result of the comparison (e.g., True if dt_str1 > dt_str2).
-
-    Raises:
-        ValueError: If the datetime strings cannot be parsed with the given format
-                    or if the operator is invalid.
-    """
-    # Map operator strings to their corresponding functions from the operator module
-    ops = {
-        '>': operator.gt,
-        '<': operator.lt,
-        '==': operator.eq,
-        '>=': operator.ge,
-        '<=': operator.le,
-        '!=': operator.ne
-    }
-
-    if op not in ops:
-        raise ValueError(f"Invalid comparison operator: '{op}'. Use one of {list(ops.keys())}")
-
-    # Try to parse the datetime strings into datetime objects
-    try:
-        dt1 = datetime.fromisoformat(d1)
-        dt2 = datetime.fromisoformat(d2)
-    except ValueError as e:
-        # Re-raise with a more informative message
-        raise ValueError(f"Could not parse datetime string. Ensure it matches the ISO format'. Original error: {e}")
-
-    # Get the correct operator function from the dictionary and apply it
-    return ops[op](dt1, dt2)
-
+    if product_name is not None:
+        print(f"Opening product '{product_name}' in DAZ Studio...")
+        return run_daz_script("OpenProductInContentLibrarySA.dsa", [args.product])
+    else:
+        print("Error: No product name specified to open.")
+        return False
 
 def run_daz_script(script_name: str, script_args:list) -> bool:
     """
@@ -126,43 +70,6 @@ def run_daz_script(script_name: str, script_args:list) -> bool:
         print(f"An unexpected error occurred while executing the DAZ script: {e}", file=sys.stderr)
         return False
     
-
-
-def fetch_playright_html_content(url: str) -> str | None:
-    """
-    Fetches the HTML content of a given URL using Playwright's synchronous API.
-    This is the recommended way to use Playwright in a synchronous context.
-
-    Args:
-        url (str): The URL to fetch.
-
-    Returns:
-        str | None: The fully rendered HTML content as a string, or None if fetching fails.
-    """
-    # 'sync_playwright()' manages the Playwright driver and browser context synchronously
-
-    with sync_playwright() as p:
-        # Launch a headless browser (browser UI not shown)
-        # You can choose 'chromium', 'firefox', or 'webkit'
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        try:
-            print(f"Navigating to {url} with Playwright (sync API)...")
-            # page.goto() is now a synchronous call
-            page.goto(url, wait_until='networkidle') # Wait until network activity is minimal
-
-            # Extract the fully rendered HTML content
-            html_content = page.content()
-            return html_content
-        except Exception as e:
-            print(f"An error occurred while fetching {url} with Playwright (sync API): {e}")
-            return None
-        finally:
-            # Always close the browser
-            browser.close()
-
-
 def fetch_json_from_url(url: str, timeout: int = 10) -> dict | None:
     """
     Fetches content from a URL, parses it as JSON, and returns it.
@@ -257,14 +164,4 @@ def fetch_html_content(url:str) -> tuple:
 
 
 if __name__ == '__main__':
-    d2 = "2025-09-29T02:27:07.867181+00:00"
-    d1 = "2026-09-18T02:27:07.867181+00:00"
-
-    dd2 = datetime.fromisoformat(d2)
-    dd1 = datetime.fromisoformat(d1)
-
-    print (dd1 > dd2)
-    print (dd1 < dd2)
-
-    print (compare_datetime_strings(d1, d2, '>'))
-    print (compare_datetime_strings(d1, d2, '<'))    
+   pass

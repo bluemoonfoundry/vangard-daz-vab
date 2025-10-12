@@ -3,7 +3,10 @@
 import os
 
 from sentence_transformers import SentenceTransformer
-from utilities import EMBEDDING_MODEL_NAME
+from dotenv import load_dotenv
+load_dotenv()
+
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-embed-large-v1")
 
 # --- Global Model Cache ---
 # This ensures the model is only loaded into memory once per process.

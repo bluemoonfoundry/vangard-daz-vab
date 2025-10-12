@@ -16,51 +16,9 @@ from datetime import datetime
 import re
 from collections import Counter
 
-# Third-party libraries
-# import psycopg2
-# import psycopg2.extras
-# import chromadb
-# import numpy as np
-# from sentence_transformers import SentenceTransformer # Uncomment for real embeddings
-
-# # --- CONSTANTS ---
-# SQLITE_DB_PATH = 'enriched_products.db'
-# SQLITE_TABLE_NAME = 'enriched_products'
-# BATCH_SIZE = 512
-
 from dotenv import load_dotenv
 load_dotenv()
 
-
-# ==============================================================================
-#  PHASE 2: TRANSFORM AND LOAD DATA
-# ==============================================================================
-# def setup_sqlite_db(db_path, table_name):
-#     """Creates the SQLite database and table using the final schema."""
-#     conn = sqlite3.connect(db_path)
-#     cursor = conn.cursor()
-#     cursor.execute(f'''
-#         CREATE TABLE IF NOT EXISTS {table_name} (
-#             sku TEXT PRIMARY KEY, url TEXT, image_url TEXT, store TEXT, name TEXT, artist TEXT, price TEXT, description TEXT,
-#             tags TEXT, formats TEXT, poly_count TEXT, textures_info TEXT, required_products TEXT, compatible_figures TEXT,
-#             compatible_software TEXT, embedding_text TEXT, last_updated TEXT, category TEXT, subcategories TEXT, styles TEXT,
-#             inferred_tags TEXT, enriched_at TEXT, mature INTEGER
-#         )
-#     ''')
-#     conn.commit()
-#     conn.close()
-#     print(f"SQLite database '{db_path}' and table '{table_name}' are ready.")
-
-# def get_all_skus_from_sqlite(db_path, table_name):
-#     """Efficiently fetches all existing SKUs from the SQLite database."""
-#     if not os.path.exists(db_path):
-#         return []
-#     conn = sqlite3.connect(db_path)
-#     cursor = conn.cursor()
-#     cursor.execute(f"SELECT sku FROM {table_name}")
-#     results = [row[0] for row in cursor.fetchall()]
-#     conn.close()
-#     return results
 
 def determine_categories(content_type_string: str) -> dict:
     """Analyzes a content type string to determine a primary category and subcategories."""
@@ -178,13 +136,6 @@ def generate_and_store_embeddings(processed_skus):
     print(f"\n--- Starting Embedding Generation for {len(processed_skus)} products ---")
 
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '512'))
-    SQLITE_DB_PATH = os.getenv('SQLITE_DB_PATH', 'enriched_products.db')    
-    SQLITE_TABLE_NAME = os.getenv('SQLITE_TABLE_NAME', 'enriched_products')
-
-    # Connect to ChromaDB once at the beginning
-    # print("Connecting to ChromaDB...")
-    # client = chromadb.Client() # For persistent storage, use: chromadb.PersistentClient(path="/path/to/db")
-    # collection = client.get_or_create_collection("product_embeddings")
 
     # Loop through the list of SKUs in chunks of BATCH_SIZE
     for i in range(0, len(processed_skus), BATCH_SIZE):

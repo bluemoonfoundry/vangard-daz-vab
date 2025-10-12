@@ -4,6 +4,7 @@ import os
 
 
 from output_formatters import print_pretty, print_json, print_table
+from utilities import open_daz_product
 import uvicorn
 
 from managers.managers import chroma_db_manager
@@ -83,13 +84,6 @@ def server_command(args):
         os.environ["APP_MODE"] = "production"
     uvicorn.run("server:app", host=args.host, port=args.port, reload=True)
 
-
-def openproduct_command(args):
-    print("Starting openproduct command...")
-    from open_daz_product import main as open_daz_product
-    open_daz_product(args)
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Visual Asset Browser Data Pipeline CLI"
@@ -162,7 +156,7 @@ def main():
         "stats": stats_command,
         "server": server_command,
         "load": load_command,
-        "openproduct": openproduct_command,
+        "openproduct": open_daz_product,
     }
     for cmd, sub_parser in parsers.items():
         sub_parser.set_defaults(func=func_map[cmd])
