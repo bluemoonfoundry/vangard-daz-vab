@@ -1,7 +1,5 @@
-# src/embedding_utils.py
-
 import os
-
+from numpy import ndarray
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 load_dotenv()
@@ -13,10 +11,8 @@ EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "mixedbread-ai/mxbai-em
 _model = None
 
 
-def get_embedding_model():
-    """
-    Loads and caches the embedding model specified in the .env file.
-    This function acts as a singleton for the embedding model.
+def get_embedding_model() -> SentenceTransformer:
+    """ Loads and caches the embedding model specified in the .env file. 
     """
     global _model
     if _model is None:
@@ -28,10 +24,9 @@ def get_embedding_model():
     return _model
 
 
-def generate_embeddings(texts, is_query: bool = False):
-    """
-    Generates embeddings for a given text or list of texts.
-    Handles model-specific prefixes for query vs. passage.
+def generate_embeddings(texts, is_query: bool = False) -> ndarray:
+    """ Generates embeddings for a given text or list of texts Handles model-specific prefixes for query vs. passage.
+
 
     Args:
         texts (str or list[str]): The text(s) to embed.

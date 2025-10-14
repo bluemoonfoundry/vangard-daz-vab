@@ -32,6 +32,7 @@ update_tasks = {}
 
 
 class QueryRequest(BaseModel):
+    """Model for the query request payload."""
     prompt: str
     limit: int = 10
     offset: int = 0
@@ -45,6 +46,7 @@ class QueryRequest(BaseModel):
 
 @app.get("/")
 async def root():
+    """Root endpoint to verify the server is running."""
     import logging
     logger = logging.getLogger(__name__)
     print("Hello from the simple FastAPI app!")
@@ -52,6 +54,7 @@ async def root():
 
 @app.post("/api/v1/update", status_code=202)
 def start_update(background_tasks: BackgroundTasks):
+    """Starts the update process in the background."""
     if APP_MODE == "demo":
         raise HTTPException(
             status_code=403, detail="Update functionality is disabled in demo mode."
@@ -68,6 +71,7 @@ def start_update(background_tasks: BackgroundTasks):
 
 @app.get("/api/v1/update/status/{task_id}")
 def get_update_status(task_id: str):
+    """Retrieves the status of an ongoing update task."""
     task = update_tasks.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -75,6 +79,14 @@ def get_update_status(task_id: str):
 
 @app.post("/api/v1/query")
 def run_query(request: QueryRequest):
+    """Handles search queries against the ChromaDB vector store.
+    
+    Args:
+        request (QueryRequest): The search parameters.
+
+    Returns:
+        dict: The search results.
+    """
     print(f"Received query request: {request}")
     print(f"model dump: {request.model_dump()}")
     result = (
@@ -90,6 +102,12 @@ def run_query(request: QueryRequest):
 
 @app.get("/api/v1/browseproduct/{product_id}")
 def browse_product(product_id: str):
+    """Opens the specified product in DAZ Studio's Content Library pane.
+    
+    Args:
+        product_id (str): The SKU or identifier of the product to open.
+    
+    """
     if APP_MODE == "demo":
         return
     open_daz_product(args=type("obj", (object,), {"product": product_id}))
@@ -97,9 +115,7 @@ def browse_product(product_id: str):
 
 @app.get("/api/v1/info")
 def get_info():
-    """
-    Runs the stats command and returns the result as a JSON document,
-    including histograms for filterable fields.
+    """ Runs the stats command and returns the result as a JSON document, including histograms for filterable fields.
     """
 
 

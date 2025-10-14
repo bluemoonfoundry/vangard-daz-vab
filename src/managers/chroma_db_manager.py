@@ -1,3 +1,5 @@
+""" Manages interactions with ChromaDB for vector storage and retrieval. """
+
 import chromadb
 import json
 import os
@@ -60,8 +62,16 @@ def build_where_clause(
 
 
 class ChromaDbManager:
+    """Handles all interactions with ChromaDB."""
 
-    def __init__(self, chroma_db_path, collection_name):
+    def __init__(self, chroma_db_path:str, collection_name:str):
+        """Create a ChromaDB manager instance.
+
+        Args:
+            chroma_db_path (str): Path to the ChromaDB database directory.
+            collection_name (str): Name of the collection to use within ChromaDB.
+        """
+        
         self.chroma_db_path = chroma_db_path
         self.collection_name = collection_name
         self.client = chromadb.PersistentClient(path=chroma_db_path)
@@ -76,14 +86,29 @@ class ChromaDbManager:
         
         
     def _clean_metadata(self, item: dict) -> dict:
-        """Ensures all metadata values are of a type supported by ChromaDB."""
+        """ Cleans metadata dictionary by removing None values and non-serializable types.
+
+        Args:
+            item (dict): Input metadata dictionary.
+
+        Returns:
+            dict: Cleaned metadata dictionary.
+        """
         clean = {}
         for key, value in item.items():
             if value is not None and isinstance(value, (str, int, float, bool)):
                 clean[key] = value
         return clean
     
-    def delete_collection(self, collection_name=None):
+    def delete_collection(self, collection_name=None) -> None:
+        """ Deletes the specified collection from ChromaDB. If no name is provided, deletes the default collection
+        
+        Args:
+            collection_name (str, optional): Name of the collection to delete. Defaults to None.
+
+        Raises:
+            Exception: If deletion fails, the original exception is raised.
+        """
         try:
             if collection_name is None:
                 cname = self.collection_name
@@ -107,9 +132,27 @@ class ChromaDbManager:
         sort_by: str = "relevance",
         sort_order: str = "descending",
     ):
+        """ Searches the ChromaDB collection with the given parameters.
+
+        Args:
+            prompt (str): The search prompt to generate the query embedding.    
+            tags (List[str], optional): List of tags to filter by. Defaults to None.
+            artists (List[str], optional): List of artists to filter by. Defaults to None.
+            categories (List[str], optional): List of categories to filter by. Defaults to None.
+            compatible_figures (List[str], optional): List of compatible figures to filter by. Defaults to None.
+            limit (int, optional): Number of results to return. Defaults to 10. Max 100.
+            offset (int, optional): Offset for pagination. Defaults to 0.           
+            score_threshold (float, optional): Maximum distance for a result to be considered relevant. Defaults to 2.0.
+            sort_by (str, optional): Field to sort by ('relevance' or metadata field). Defaults to 'relevance'.
+            sort_order (str, optional): 'ascending' or 'descending'. Defaults to 'descending'.  
+        
+        Returns:
+            dict: Search results including total hits, limit, offset, and list of results.
+
+        Raises:
+            
         """
-        Performs a hybrid search with multiple, faceted metadata filters.
-        """
+
 
         # --- 1. Generate Query Embedding ---
         query_embedding = generate_embeddings(prompt, is_query=True)
@@ -151,8 +194,6 @@ class ChromaDbManager:
                         }
                     )
 
-        #print (f'DEBUG: Result set = {processed_results}')
-
         # --- 5. Sorting Logic ---
         reverse_order = sort_order == "descending"
         if sort_by != "relevance":
@@ -176,12 +217,17 @@ class ChromaDbManager:
         }
         
 
-    #def load_sqlite_to_chroma(self, checkpoint_date: str|None=None, rebuild:bool = False):
-    def load_sqlite_to_chroma(self, valid_products:list):
+    def load_sqlite_to_chroma(self, valid_products:list) -> bool:
         """
         If rebuild then reads all products from an SQLite database, generates new embeddings,
         and completely rebuilds the ChromaDB collection. Otherwise, only update the Chroma
         database with products that are newer than the checkpoint_date
+
+        Args:
+            valid_products (list): List of product dictionaries to be added/updated in ChromaDB
+
+        Returns:
+            bool: True if the operation was successful, False otherwise.
         """
                 
         texts_to_embed = [p["embedding_text"] for p in valid_products]
@@ -231,8 +277,10 @@ class ChromaDbManager:
         return True
     
     def get_db_stats(self):
-        """
-        Gathers and returns statistics and histograms for all key filterable fields.
+        """Gathers and returns statistics and histograms for all key filterable fields.
+
+        Returns:
+            dict: A dictionary containing total document count, last update date, and histograms for tags, artists, compatible figures, and categories. 
         """
 
         total_docs = self.collection.count()

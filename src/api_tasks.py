@@ -2,12 +2,13 @@
 import argparse
 from managers.postgres_db_manager import main as run_daz_load
 
-def run_fetch_process():
-    print("Simulating external fetch process...")
-    # TODO: Replace with your actual library call.
-    return True
-
 def run_update_flow(task_status: dict):
+    """Runs the full update flow for DAZ product data, including loading new data from PostgreSQL, updating the SQLite database, and generating embeddings.
+
+    Args:
+        task_status (dict): A dictionary to track the status of the task, including keys like 'task_status', 'stage', and 'progress'.
+    """
+
     # Create a dictionary of your predefined arguments
     config_dict = {
         'force': False,

@@ -7,21 +7,20 @@ from managers.managers import chroma_db_manager, sqlite_db, daz_pg_analyzer
 from embedding_utils import generate_embeddings
 import re
 from collections import Counter
-import pprint
-
-
-import os
-import argparse
-from datetime import datetime
-import re
-from collections import Counter
 
 from dotenv import load_dotenv
 load_dotenv()
 
 
 def determine_categories(content_type_string: str) -> dict:
-    """Analyzes a content type string to determine a primary category and subcategories."""
+    """Analyzes a content type string to determine a primary category and subcategories.
+    
+    Args:
+        content_type_string (str): The raw content type string from the database.
+
+    Returns:
+        dict: A dictionary with 'category' and 'subcategories' keys.
+    """
     IGNORE_WORDS = {'follower', 'default', 'support', 'preset', 'people', 'genesis', 'genesis 9', 'genesis 8', 'genesis 3'}
     PRIORITY_WORDS = {'character', 'clothes', 'accessories', 'environments', 'hair', 'poses', 'animations', 'props', 'tools', 'effects'}
     if not content_type_string: return {'category': None, 'subcategories': []}
@@ -38,12 +37,11 @@ def determine_categories(content_type_string: str) -> dict:
     return {'category': primary_category, 'subcategories': sorted(list(unique_words))}
 
 def scrape_product_page(sku):
+    """Given a SKU, fetch additional product details by scraping the product page.
+
+    Args:
+        sku (str): The SKU of the product to scrape.
     """
-    --- PLACEHOLDER ---
-    This is where your web scraping logic will go.
-    It should take a SKU, construct a URL, fetch the page, and parse it.
-    """
-    #print(f"    -> (Placeholder) Scraping web for SKU: {sku}")
     rv = {}
     slab_url = f'https://www.daz3d.com/dazApi/slab/{sku}'
     base_content = fetch_json_from_url(slab_url)
@@ -75,10 +73,15 @@ def scrape_product_page(sku):
 
     return rv
 
-def generate_embedding_text(product_data, web_data):
-    """
-    Generates a rich, descriptive paragraph for the embedding model.
-    Focuses on combining factual data with potential use-cases and avoids noisy data.
+def generate_embedding_text(product_data, web_data) -> str:
+    """Generates a rich, descriptive paragraph for the embedding model. Focuses on combining factual data with potential use-cases and avoids noisy data.
+
+    Args:
+        product_data (dict): The raw product data from the database.
+        web_data (dict): The scraped web data including description and tags.
+
+    Returns:
+        str: A high-quality descriptive text for embedding generation.
     """
     print("    -> Generating high-quality embedding text...")
     
@@ -121,13 +124,14 @@ def generate_embedding_text(product_data, web_data):
     # Join all the parts into a single, cohesive paragraph.
     return " ".join(parts)
 
-# ==============================================================================
-#  PHASE 3: GENERATE AND STORE EMBEDDINGS
-# ==============================================================================
 def generate_and_store_embeddings(processed_skus):
-    """
-    Fetches processed data from SQLite, generates embeddings, and stores them in ChromaDB
-    in safe-sized batches to avoid database parameter limits.
+    """Fetches processed data from SQLite, generates embeddings, and stores them in ChromaDB in safe-sized batches to avoid database parameter limits.
+
+    Args:
+        processed_skus (list): List of SKUs that have been processed and need embeddings.
+
+    Returns:   
+        bool: True if successful, False otherwise.
     """
     if not processed_skus:
         print("\nNo new products were processed, skipping embedding generation.")
@@ -200,12 +204,12 @@ def generate_and_store_embeddings(processed_skus):
             return False
     
     print(f"\nSuccessfully finished processing all batches.")
+    return True
 
 
 
 def determine_compatibility(product_data: dict, figure_names: list) -> dict:
-    """
-    Determines compatible figures by checking multiple fields in order of priority:
+    """ Determines compatible figures by checking multiple fields in order of priority:
     1. The formal 'product_compatibility' string.
     2. The product 'name'.
     3. The product 'description' from web scraping (if available).

@@ -10,6 +10,8 @@ import uvicorn
 from managers.managers import chroma_db_manager
 
 def load_command(args):
+    """Loads data from DAZ Postgres to SQLite and ChromaDB."""
+
     print("Starting load command...")
     from managers.postgres_db_manager import main as load_dazdb_content
     load_dazdb_content(args)
@@ -40,6 +42,8 @@ def query_command(args):
         print_pretty(response)
 
 def stats_command(args):
+    """Gathers and prints statistics about the ChromaDB collection."""
+
     print("Gathering statistics from the database...")
     stats = chroma_db_manager.get_db_stats()
     if stats is None:
@@ -72,6 +76,7 @@ def stats_command(args):
 
 
 def server_command(args):
+    """Runs the FastAPI web server."""
     if args.demo:
         print(
             "=" * 50
@@ -85,6 +90,8 @@ def server_command(args):
     uvicorn.run("server:app", host=args.host, port=args.port, reload=True)
 
 def main():
+    """Main entry point for the CLI application.""" 
+    
     parser = argparse.ArgumentParser(
         description="Visual Asset Browser Data Pipeline CLI"
     )

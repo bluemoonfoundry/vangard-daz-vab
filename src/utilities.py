@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def open_daz_product(args):
+    """ Opens a specified product in DAZ Studio's Content Library pane."""
     product_name = args.product if args and args.product else None
 
     if product_name is not None:
@@ -122,7 +123,15 @@ def fetch_json_from_url(url: str, timeout: int = 10) -> dict | None:
         return None
 
 
-def extract_meta_tags(text):
+def extract_meta_tags(text) -> dict:
+    """ Extracts meta tags from HTML text and returns them as a dictionary.
+    
+    Args:
+        text (str): The HTML text as a string.
+
+    Returns:
+        dict: A dictionary of meta tag attributes and their values.
+    """
 
     soup = BeautifulSoup(text,'lxml')
 
@@ -141,6 +150,16 @@ def extract_meta_tags(text):
     return tag_attributes            
 
 def fetch_html_content(url:str) -> tuple:
+    """ Fetches HTML content from a URL and extracts meta tags.
+
+    Args:
+        url (str): The URL to fetch HTML content from.
+
+    Returns:
+        tuple: A tuple containing the HTML content as a string and a dictionary of meta tag attributes.
+    """
+
+    
     html_content = None
     tag_attributes = None
     try:

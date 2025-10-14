@@ -6,12 +6,18 @@ import chromadb
 
 from managers.managers import chroma_db_manager
 
-from dotenv import load_dotenv
+def document_exists(doc_id:str) -> bool:
+    """ Checks if a document with the given ID exists in the ChromaDB collection.
 
-def document_exists(doc_id):
+    Args:
+        doc_id (str): The ID of the document to check.
+
+    Returns:
+        bool: True if the document exists, False otherwise.
+    """
     try:
         # Query the collection by the document ID
-        results = chroma_db_manager.collection.collection.get(ids=[doc_id])
+        results = chroma_db_manager.collection.get(ids=[doc_id])
         # If the document exists, the results will contain the document
         return len(results["ids"]) > 0
     except Exception as e:
@@ -19,9 +25,10 @@ def document_exists(doc_id):
         return False
     
 def inspect_collection_metadata(limit: int = 5):
-    """
-    Connects to ChromaDB, fetches a few items from the collection,
-    and prints the data types of their metadata fields.
+    """ Connects to ChromaDB, fetches a few items from the collection, and prints the data types of their metadata fields.
+
+    Args:
+        limit (int): Number of items to fetch and inspect. Default is 5.
     """
 
     total_docs = chroma_db_manager.collection.count()

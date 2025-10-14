@@ -5,13 +5,25 @@ import logging
 from datetime import datetime, timezone
 
 class SQLiteWrapper:
+    """A simple SQLite database manager for storing and retrieving product data."""
+
     def __init__(self, sqlite_db_path, sqlite_db_table):
+        """Initializes the SQLiteWrapper with the database path and table name.
+        
+        Args:
+            sqlite_db_path (str): Path to the SQLite database file. 
+            sqlite_db_table (str): Name of the table to use within the SQLite database.
+        """
         self._logger = logging.getLogger(__name__)
         self.sqlite_db_path     = sqlite_db_path
         self.sqlite_db_table    = sqlite_db_table
 
     def setup_sqlite_db(self, force_reset:bool=False):
-        """Creates the SQLite database and table using the final schema."""
+        """Creates the SQLite database and table using the final schema.
+        
+        Args:
+            force_reset (bool): If True, deletes any existing database file before creating a new one
+        """
 
         if force_reset and os.path.exists(self.sqlite_db_path):
             print("--force flag detected. Deleting existing SQLite database. {force_reset} {os.path.exists(self.sqlite_db_path)}")
@@ -32,6 +44,9 @@ class SQLiteWrapper:
         print(f"SQLite database '{self.sqlite_db_path}' and table '{self.sqlite_db_table}' are ready.")
 
     def get_connection(self):
+        """Establishes and returns a connection to the SQLite database."""
+
+
         try:
             self.connection = sqlite3.connect(self.sqlite_db_path)
             self.connection.row_factory = sqlite3.Row
@@ -43,9 +58,22 @@ class SQLiteWrapper:
         return self.connection
 
     def get_all_skus_from_sqlite(self):
+        """Fetches all existing SKUs from the SQLite database.
+        
+        Returns:
+            list: A list of all SKUs in the SQLite database as strings.
+        """
         return self._fetchall_query(f"SELECT sku FROM {self.sqlite_db_table}")
     
     def get_content_by_sku_batch(self, sku_batch):
+        """Fetches full product data for a given batch of SKUs from SQLite.
+        
+        Args:
+            sku_batch (list): A list of SKUs to fetch data for.
+
+        Returns:    
+            list: A list of dictionaries containing product data for the given SKUs.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
 
@@ -64,9 +92,15 @@ class SQLiteWrapper:
         return rows_to_embed
 
     def _fetchall_query(self, query) -> list:
-        """Efficiently fetches all existing SKUs from the SQLite database."""
-        # if not os.path.exists(db_path):
-        #     return []
+        """Helper method to execute a query and return all results as a list of SKUs.
+
+        Args:
+            query (str): The SQL query to execute.
+
+        Returns:
+            list: A list of SKUs as strings.
+        """
+
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
@@ -81,6 +115,15 @@ class SQLiteWrapper:
         return results
 
     def execute_fetchone_query(self, query:str):
+        """Executes a query and returns a single result.
+
+        Args:
+            query (str): The SQL query to execute.  
+
+        Returns:    
+            any: The first column of the first row of the result, or None if no result.
+        """
+
         content=None
         try:
             cursor = self.connection.cursor()
@@ -92,6 +135,14 @@ class SQLiteWrapper:
         return content
 
     def execute_fetchall_query(self, query:str) -> list:
+        """Executes a query and returns all results.
+
+        Args:
+            query (str): The SQL query to execute.  
+
+        Returns:    
+            list: A list of all rows returned by the query.
+        """
         content=[]
         try:
             cursor = self.connection.cursor()
@@ -102,6 +153,7 @@ class SQLiteWrapper:
         return content
     
     def count(self) -> int:
+        """Returns the total number of rows in the SQLite table."""
         q = f"SELECT count(*) from {self.sqlite_db_table}"
         rv = self.execute_fetchone_query(q)
         if rv is None:
@@ -110,6 +162,15 @@ class SQLiteWrapper:
             return int(rv)
 
     def get_sku_row(self, sku) -> dict|None:
+        """Fetches the full row for a given SKU from SQLite.
+        
+        Args:
+            sku (str): The SKU to fetch data for.   
+
+        Returns:    
+            dict|None: A dictionary containing the product data for the given SKU, or None if not found.
+        
+        """
         q = f"SELECT * from {self.sqlite_db_table} where sku = '{sku}'"
         content = self.execute_fetchall_query (q)
         if len(content) > 0:
@@ -118,6 +179,16 @@ class SQLiteWrapper:
             return None
         
     def get_post_checkpoint_rows(self, columns, checkpoint:str) -> list[dict]:
+        """Fetches all rows updated after a given checkpoint timestamp.
+
+        Args:
+            columns (str): Comma-separated list of columns to retrieve.
+            checkpoint (str): ISO 8601 formatted timestamp string.  
+
+        Returns:
+            list[dict]: A list of dictionaries representing the rows updated after the checkpoint.
+        """
+
         content=[]
         q = f"""
         select {columns}
@@ -130,7 +201,11 @@ class SQLiteWrapper:
         return  [dict(zip(row.keys(), row)) for row in rows]
         
     def insert_item(self, item):
-        # Convert any list fields to JSON strings for database storage
+        """Inserts or updates a product item in the SQLite database.
+
+        Args:
+            item (dict): A dictionary containing the product data to insert or update.  
+        """ 
         for key, value in item.items():
             if isinstance(value, list):
                 item[key] = json.dumps(value)
@@ -156,6 +231,7 @@ class SQLiteWrapper:
             return False
         
     def close(self):
+        """Closes the SQLite database connection."""
         self.connection.close()
 
 if __name__ == '__main__':

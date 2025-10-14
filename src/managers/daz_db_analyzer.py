@@ -5,9 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DazDBAnalyzer:
+    """Manages connections and queries to a PostgreSQL database for DAZ 3D content.
     """
-    Connects to the Daz Content PostgreSQL database to extract product data.
-    """
+
+    """SQL query components for fetching product data."""
     QUERY_BODY = """
         SELECT
             p.id AS product_id,
@@ -46,9 +47,21 @@ class DazDBAnalyzer:
         LEFT JOIN dzcontent."tblCategories" AS cat ON cc.category_id = cat."RecID"
         LEFT JOIN dzcontent."tblType" AS ct ON c.content_type_id = ct."RecID"
     """
+
+    """SQL query grouping and ordering clause."""
     QUERY_GROUPING = "GROUP BY p.id, p.name, p.artists, p.token, p.last_update, p.date_installed ORDER BY p.name"
 
+
     def __init__(self):        
+        """Initializes the DazDBAnalyzer with database configuration from environment variables.
+        Expects the following environment variables to be set:  
+            - DB_NAME
+            - DB_USER
+            - DB_PASS
+            - DB_HOST
+            - DB_PORT
+            - BATCH_SIZE (optional, defaults to 512)
+        """
         try:
             db_config = {
                 "dbname": os.environ['DB_NAME'], 
@@ -65,6 +78,16 @@ class DazDBAnalyzer:
         self.batch_size = int(os.getenv("BATCH_SIZE", 512))
 
     def _execute_query(self, sql, params=None):
+        """Executes a SQL query and returns the results as a list of dictionaries.
+
+        Args:
+            sql (str): The SQL query to execute.    
+            params (tuple, optional): Parameters to pass to the SQL query. Defaults to None.
+
+        Returns:
+            list: A list of dictionaries representing the query results.
+        """
+
         results = []
         try:
             with psycopg2.connect(**self.db_config) as conn:
@@ -78,8 +101,10 @@ class DazDBAnalyzer:
         return [dict(row) for row in results]
 
     def get_all_skus(self):
-        """
-            Efficiently fetches a list of all non-null AND non-empty SKUs from PostgreSQL.
+        """Efficiently fetches a list of all non-null AND non-empty SKUs from PostgreSQL.
+
+        Returns:
+            list: A list of all SKUs in the database as strings.
         """
         print("Fetching all valid SKUs from PostgreSQL...")
         # This query now filters out both NULL and empty strings
@@ -88,7 +113,14 @@ class DazDBAnalyzer:
         return [row['token'] for row in results] if results else []
 
     def get_products_by_sku_list(self, skus):
-        """Fetches full product data for a given list of SKUs, handling batching."""
+        """Fetches full product data for a given list of SKUs, handling batching.
+        
+        Args:
+            skus (list): List of SKUs to fetch data for.
+
+        Returns:
+            list: A list of dictionaries containing product data for the given SKUs.
+        """
         if not skus:
             return []
         print(f"Fetching full data for {len(skus)} products from PostgreSQL...")

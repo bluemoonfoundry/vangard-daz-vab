@@ -12,8 +12,8 @@ sqlite_db = SQLiteWrapper(
 )
 
 chroma_db_manager = ChromaDbManager(
-    os.environ.get("CHROMA_PATH"), 
-    os.environ.get("CHROMA_COLLECTION")
+    os.environ.get("CHROMA_PATH", "chroma_db"), 
+    os.environ.get("CHROMA_COLLECTION", "daz_products2")
 )
 
 daz_pg_analyzer = DazDBAnalyzer()
