@@ -31,7 +31,7 @@ This tool is built with Python. If you don't have it, you'll need to install it 
 
 ### Step 2: Download the VAB Project
 
-1.  Go to the [VAB GitHub Repository page](https://github.com/your-username/your-repo-name).
+1.  Go to the [VAB GitHub Repository page](https://github.com/bluemoonfoundry/vangard-daz-vab/archive/refs/heads/main.zip).
 2.  Click the green **`< > Code`** button.
 3.  Click **"Download ZIP"**.
 4.  Unzip the downloaded file into a permanent location on your computer, for example `C:\Tools\VAB`.
